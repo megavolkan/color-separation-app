@@ -32,7 +32,8 @@ Linux (Arch/CachyOS): `sudo pacman -S ghostscript uv`, sonra aynı komutlar.
 
 - **Dosya > Aç…** (⌘O) ya da PDF'i pencereye sürükleyin.
 - Sağdaki listede kalıpları açıp kapatın; kalıp adının yanında sayfadaki ortalama
-  kapsama oranı yazar. Rengi PDF'ten okunamayan bir spotun rengini çift tıklayıp seçin.
+  kapsama oranı yazar. Satırın sağındaki renk kutusuna tıklayarak kalıbın ekran rengini değiştirebilirsiniz
+  (rengi PDF'ten okunamayan spotlar için).
 - Tek kalıp seçiliyken **Tek kalıbı gri göster** ile kalıp gri tonlu görünür.
 - İmleci sayfada gezdirin: alttaki panel her kalıbın yüzdesini ve toplam mürekkebi (TAC) gösterir.
 - ◀ ▶ (PageUp/PageDown) ile sayfalar arasında gezinin. ⌘ + tekerlek yakınlaştırır, **Sığdır** (⌘0) geri alır.

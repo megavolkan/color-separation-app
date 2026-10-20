@@ -42,7 +42,7 @@ def test_open_navigate_and_measure(app, renderer, fixtures_dir):
 
     # tek kalıp + gri
     win.plates.set_all(False)
-    win.plates.item(4).setCheckState(win.plates.item(4).checkState().Checked)
+    win.plates.set_checked("Spot Gold. 871/C", True)
     win.gray_box.setChecked(True)
     assert win.plates.checked_names() == ["Spot Gold. 871/C"]
     img = win.view._item.pixmap().toImage()
