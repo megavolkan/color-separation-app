@@ -12,6 +12,20 @@ uv sync
 uv run ayrim            # veya: uv run ayrim dosya.pdf
 ```
 
+### Normal uygulama olarak (Ayrim.app)
+
+Terminali yalnızca bir kez, paketi üretmek için kullanırsınız:
+
+```sh
+./packaging/build_mac.sh
+```
+
+Betik `Ayrim.app`'i üretip Uygulamalar klasörüne kopyalar. Sonra Ayrım'ı
+Launchpad'den, Spotlight'tan ya da Dock'tan açabilir, PDF'leri Dock simgesine
+bırakabilir veya Finder'da sağ tık > **Birlikte Aç > Ayrım** ile açabilirsiniz.
+Ghostscript uygulamaya gömülü değildir, Homebrew'daki `gs` kullanılır. Kod
+değiştiğinde betiği yeniden çalıştırmak yeterlidir.
+
 Linux (Arch/CachyOS): `sudo pacman -S ghostscript uv`, sonra aynı komutlar.
 
 ## Kullanım

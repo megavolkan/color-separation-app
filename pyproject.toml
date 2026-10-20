@@ -16,6 +16,7 @@ ayrim = "ayrim.ui.app:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
+build = ["pyinstaller>=6.10"]
 
 [build-system]
 requires = ["uv_build>=0.8,<0.12.0"]
