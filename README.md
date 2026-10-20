@@ -36,7 +36,10 @@ Linux (Arch/CachyOS): `sudo pacman -S ghostscript uv`, sonra aynı komutlar.
   (rengi PDF'ten okunamayan spotlar için).
 - Tek kalıp seçiliyken **Tek kalıbı gri göster** ile kalıp gri tonlu görünür.
 - İmleci sayfada gezdirin: alttaki panel her kalıbın yüzdesini ve toplam mürekkebi (TAC) gösterir.
-- ◀ ▶ (PageUp/PageDown) ile sayfalar arasında gezinin. ⌘ + tekerlek yakınlaştırır, **Sığdır** (⌘0) geri alır.
+- ◀ ▶ (PageUp/PageDown) ile sayfalar arasında gezinin. Trackpad'de kıstırarak ya da ⌘ + tekerlekle
+  yakınlaştırın, **Sığdır** (⌘0) geri alır.
+- **Çözünürlük: Otomatik** sayfayı ekranın (Retina dahil) gerektirdiği çözünürlükte işler;
+  yakınlaştırınca daha yüksek DPI ile yeniden işler. İsterseniz sabit 72/150/300/600 dpi seçin.
 
 İşlenen sayfalar `~/Library/Caches/ayrim` altında saklanır; aynı dosya ve ayarla
 yeniden işlenmez.

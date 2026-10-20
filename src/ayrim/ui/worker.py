@@ -11,7 +11,7 @@ from ..separations import load_separations
 
 
 class RenderSignals(QObject):
-    finished = Signal(int, int, object)  # istek no, sayfa, list[Separation]
+    finished = Signal(int, int, int, object)  # istek no, sayfa, dpi, list[Separation]
     failed = Signal(int, int, str)
 
 
@@ -33,4 +33,4 @@ class RenderTask(QRunnable):
         except Exception as e:  # arayüze hata olarak iletilir
             self.signals.failed.emit(self.request_id, self.page, str(e))
             return
-        self.signals.finished.emit(self.request_id, self.page, seps)
+        self.signals.finished.emit(self.request_id, self.page, self.dpi, seps)

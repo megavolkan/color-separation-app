@@ -29,7 +29,7 @@ def test_open_navigate_and_measure(app, renderer, fixtures_dir):
     from ayrim.ui.main_window import MainWindow
 
     win = MainWindow(renderer)
-    win.dpi = 72
+    win.dpi_combo.setCurrentIndex(win.dpi_combo.findData(72))
     win.open_pdf(fixtures_dir / "multipage.pdf")
     assert wait_for(app, lambda: win.seps)
     assert win.plates.checked_names() == ["Cyan", "Magenta", "Yellow", "Black", "PANTONE 185 C"]
@@ -47,4 +47,23 @@ def test_open_navigate_and_measure(app, renderer, fixtures_dir):
     assert win.plates.checked_names() == ["Spot Gold. 871/C"]
     img = win.view._item.pixmap().toImage()
     assert img.pixelColor(60, 59).red() == pytest.approx(127, abs=3)
+    win.close()
+
+
+def test_auto_dpi_follows_zoom(app, renderer, fixtures_dir):
+    from ayrim.ui.main_window import MainWindow
+
+    win = MainWindow(renderer)
+    win.resize(900, 700)
+    win.show()
+    win.open_pdf(fixtures_dir / "basic.pdf")
+    assert wait_for(app, lambda: win.seps)
+    first = win.shown_dpi
+    assert first >= 72
+    win.view.zoom(4.0)
+    assert wait_for(app, lambda: win.shown_dpi > first)
+    # görüntü sahnede aynı boyutta kalır (PDF noktası birimi)
+    assert win.view._item.sceneBoundingRect().width() == pytest.approx(300, abs=1)
+    # dosya bırakma sayfa alanında yutulmaz, ana pencereye geçer
+    assert not win.view.viewport().acceptDrops() and win.acceptDrops()
     win.close()

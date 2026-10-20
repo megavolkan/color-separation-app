@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import Qt, QThreadPool, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDockWidget,
     QFileDialog,
     QHBoxLayout,
@@ -29,9 +30,12 @@ from .page_view import PageView
 from .plate_list import PlateList
 from .worker import RenderTask
 
-DEFAULT_DPI = 150
 UNKNOWN_SPOT_RGB: RGB = (0.6, 0.6, 0.6)
-MAX_CACHED_PAGES = 6
+MAX_CACHED_RENDERS = 8
+# Otomatik modda seçilebilecek çözünürlükler ve sayfa başına piksel sınırı (bellek için).
+DPI_STEPS = (72, 100, 150, 200, 300, 400, 600, 800, 1200)
+MAX_PIXELS = 60_000_000
+MANUAL_DPIS = (72, 150, 300, 600)
 
 
 class MainWindow(QMainWindow):
@@ -42,10 +46,12 @@ class MainWindow(QMainWindow):
         self.pdf: Path | None = None
         self.info: DocInfo | None = None
         self.page = 1
-        self.dpi = DEFAULT_DPI
+        self.manual_dpi: int | None = None  # None = otomatik
+        self.shown_dpi = 0
         self.overprint = True
         self.seps: list[Separation] = []
-        self.page_cache: dict[int, list[Separation]] = {}
+        self.render_cache: dict[tuple[int, int], list[Separation]] = {}  # (sayfa, dpi)
+        self.pending: set[tuple[int, int]] = set()
         self.checked: dict[str, bool] = {}
         self.color_overrides: dict[str, RGB] = {}
         self._request = 0
@@ -58,6 +64,14 @@ class MainWindow(QMainWindow):
         self.view.hovered.connect(self._on_hover)
         self.view.left.connect(lambda: self.readout.setText(""))
         self.setCentralWidget(self.view)
+        # Yakınlaştırma bitince gerekirse daha yüksek çözünürlükte yeniden işle.
+        self._zoom_timer = QTimer(self)
+        self._zoom_timer.setSingleShot(True)
+        self._zoom_timer.setInterval(300)
+        self._zoom_timer.timeout.connect(self._ensure_render)
+        self.view.view_changed.connect(self._zoom_timer.start)
+        self.dpi_label = QLabel("")
+        self.statusBar().addPermanentWidget(self.dpi_label)
 
         self._build_plate_dock()
         self._build_readout_dock()
@@ -99,6 +113,16 @@ class MainWindow(QMainWindow):
         fit_act.setShortcut(QKeySequence("Ctrl+0"))
         fit_act.triggered.connect(self.view.fit)
         tb.addAction(fit_act)
+        tb.addSeparator()
+
+        tb.addWidget(QLabel(" Çözünürlük: "))
+        self.dpi_combo = QComboBox()
+        self.dpi_combo.addItem("Otomatik", None)
+        for d in MANUAL_DPIS:
+            self.dpi_combo.addItem(f"{d} dpi", d)
+        self.dpi_combo.setToolTip("Otomatik: ekrana ve yakınlaştırmaya göre seçilir.")
+        self.dpi_combo.currentIndexChanged.connect(self._on_dpi_mode)
+        tb.addWidget(self.dpi_combo)
         tb.addSeparator()
 
         self.gray_box = QCheckBox("Tek kalıbı gri göster")
@@ -155,7 +179,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Boş belge", "Belgede sayfa yok.")
             return
         self.pdf, self.info = path, info
-        self.page_cache.clear()
+        self.render_cache.clear()
+        self.pending.clear()
+        self.view.fit()
         self.checked.clear()
         self.color_overrides.clear()
         self.seps = []
@@ -181,41 +207,87 @@ class MainWindow(QMainWindow):
             return
         self.page = page
         self._update_nav()
-        if page in self.page_cache:
-            self._show_page(self.page_cache[page])
+        info = self.info.pages[page - 1]
+        self.view.set_page(info.width_pt, info.height_pt)
+        self.seps, self.shown_dpi = [], 0
+        # Daha önce işlenmiş bir sürüm varsa (en yüksek DPI'lı) hemen göster.
+        cached = sorted(d for p, d in self.render_cache if p == page)
+        if cached:
+            self._show_page(self.render_cache[(page, cached[-1])], cached[-1])
+        else:
+            self.view.clear()
+        self._ensure_render()
+
+    def target_dpi(self) -> int:
+        """Gösterilecek çözünürlük: elle seçilen ya da ekranın gerektirdiği."""
+        if self.manual_dpi:
+            return self.manual_dpi
+        info = self.info.pages[self.page - 1]
+        need = self.view.physical_scale() * 72.0
+        limit = (MAX_PIXELS / max(info.width_pt * info.height_pt, 1.0)) ** 0.5 * 72.0
+        allowed = [d for d in DPI_STEPS if d <= limit] or [DPI_STEPS[0]]
+        return next((d for d in allowed if d >= need), allowed[-1])
+
+    def _ensure_render(self) -> None:
+        if not self.info or not (1 <= self.page <= self.info.page_count):
             return
+        dpi = self.target_dpi()
+        if self.manual_dpi is None and self.shown_dpi >= dpi:
+            return  # otomatik modda daha keskin bir görüntü zaten ekranda
+        if dpi == self.shown_dpi:
+            return
+        key = (self.page, dpi)
+        if key in self.render_cache:
+            self._show_page(self.render_cache[key], dpi)
+            return
+        if key in self.pending:
+            return
+        self.pending.add(key)
         self._request += 1
-        self.statusBar().showMessage(f"Sayfa {page} işleniyor…")
+        self.statusBar().showMessage(f"Sayfa {self.page} {dpi} dpi işleniyor…")
         self.view.setCursor(Qt.CursorShape.BusyCursor)
-        task = RenderTask(self.renderer, self.pdf, page, self.dpi, self.overprint, self._request)
+        task = RenderTask(self.renderer, self.pdf, self.page, dpi, self.overprint, self._request)
         task.signals.finished.connect(self._on_rendered)
         task.signals.failed.connect(self._on_failed)
         self.pool.start(task)
 
-    def _on_rendered(self, request_id: int, page: int, seps: list[Separation]) -> None:
-        self.page_cache[page] = seps
-        while len(self.page_cache) > MAX_CACHED_PAGES:
-            self.page_cache.pop(next(k for k in self.page_cache if k != self.page))
-        if request_id != self._request or page != self.page:
+    def _on_dpi_mode(self) -> None:
+        self.manual_dpi = self.dpi_combo.currentData()
+        self._ensure_render()
+
+    def _on_rendered(self, request_id: int, page: int, dpi: int, seps: list[Separation]) -> None:
+        self.pending.discard((page, dpi))
+        self.render_cache[(page, dpi)] = seps
+        while len(self.render_cache) > MAX_CACHED_RENDERS:
+            self.render_cache.pop(next(k for k in self.render_cache if k[0] != self.page))
+        if not self.pending:
+            self.view.unsetCursor()
+            self.statusBar().clearMessage()
+        if page != self.page:
             return  # kullanıcı başka sayfaya geçmiş
-        self.view.unsetCursor()
-        self.statusBar().showMessage(f"Sayfa {page}: {len(seps)} kalıp ({self.dpi} dpi)", 5000)
-        self._show_page(seps)
+        auto_sharper = self.manual_dpi is None and dpi > self.shown_dpi
+        if dpi == self.target_dpi() or auto_sharper or not self.seps:
+            self._show_page(seps, dpi)
+        self._ensure_render()  # bu arada yakınlaştırma değişmiş olabilir
 
     def _on_failed(self, request_id: int, page: int, msg: str) -> None:
+        self.pending = {k for k in self.pending if k[0] != page}
         if request_id != self._request:
             return
         self.view.unsetCursor()
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "Ghostscript hatası", msg)
 
-    def _show_page(self, seps: list[Separation]) -> None:
-        self.seps = seps
-        plates = []
-        for s in seps:
-            color, known = self.plate_color(s.name)
-            plates.append((s.name, color, s.coverage(), known))
-        self.plates.set_plates(plates, self.checked)
+    def _show_page(self, seps: list[Separation], dpi: int) -> None:
+        same_plates = [s.name for s in seps] == [s.name for s in self.seps]
+        self.seps, self.shown_dpi = seps, dpi
+        if not same_plates:
+            plates = []
+            for s in seps:
+                color, known = self.plate_color(s.name)
+                plates.append((s.name, color, s.coverage(), known))
+            self.plates.set_plates(plates, self.checked)
+        self.dpi_label.setText(f"{dpi} dpi")
         self.refresh_preview()
 
     def _update_nav(self) -> None:
@@ -259,7 +331,7 @@ class MainWindow(QMainWindow):
             rgb = grayscale(active[0].ink)
         else:
             rgb = composite([(s.ink, self.plate_color(s.name)[0]) for s in active], shape=self.seps[0].ink.shape)
-        self.view.set_image(rgb)
+        self.view.set_image(rgb, self.shown_dpi)
 
     def _on_hover(self, x: int, y: int) -> None:
         if not self.seps:
