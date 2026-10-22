@@ -24,10 +24,10 @@ EXPECTED: dict[str, dict[int, list[tuple[Box, dict[str, float]]]]] = {}
 def pdf_name(name: str) -> str:
     out = []
     for ch in name:
-        if ch.isalnum() or ch in "-_.":
+        if ch.isascii() and (ch.isalnum() or ch in "-_."):
             out.append(ch)
         else:
-            out.append(f"#{ord(ch):02X}")
+            out.extend(f"#{b:02X}" for b in ch.encode("utf-8"))
     return "/" + "".join(out)
 
 
@@ -215,3 +215,14 @@ def icc_cmyk_pdf(path: Path, profile: bytes) -> list[tuple[Box, dict[str, float]
     w.write(path, w.add(f"<< /Type /Catalog /Pages {pages} 0 R >>"))
     names = ("Cyan", "Magenta", "Yellow", "Black")
     return [(b, {n: v * 100 for n, v in zip(names, cmyk)}) for b, cmyk in boxes]
+
+
+# Windows dosya adlarında geçersiz karakterler içeren spot adları.
+SPECIAL_SPOTS = ['Lak: "Parlak" <A>', "Sarı|Altın*?", "PANTONE 871 C/2"]
+
+
+def special_names_pdf(path: Path) -> None:
+    for name in SPECIAL_SPOTS:
+        SPOTS.setdefault(name, (0.1, 0.2, 0.3, 0.0))
+    c = "".join(f"/CS{i} cs 1 scn\n" + rect(20 + 90 * i, 20) for i in range(len(SPECIAL_SPOTS)))
+    build(path, [{"content": c, "spots": SPECIAL_SPOTS}])

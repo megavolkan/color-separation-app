@@ -29,6 +29,13 @@ uv run pyinstaller --noconfirm --clean --distpath dist --workpath build/pyinstal
 xattr -cr dist/Ayrim.app
 codesign --force --deep --sign - dist/Ayrim.app
 
+# CI'da (GitHub Actions) kurulum yapılmaz, yalnızca zip üretilir.
+if [ -n "${CI:-}" ]; then
+    ditto -c -k --keepParent dist/Ayrim.app dist/Ayrim-macos-arm64.zip
+    echo "Hazır: dist/Ayrim-macos-arm64.zip"
+    exit 0
+fi
+
 target="/Applications/Ayrim.app"
 if [ -w /Applications ]; then
     rm -rf "$target"

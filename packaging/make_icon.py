@@ -5,7 +5,7 @@ import sys
 from PIL import Image, ImageChops, ImageDraw
 
 S = 1024
-out = sys.argv[1] if len(sys.argv) > 1 else "icon.png"
+out = sys.argv[1] if len(sys.argv) > 1 else "icon.png"  # isteğe bağlı 2. argüman: .ico yolu
 
 bg = Image.new("RGB", (S, S), "white")
 img = bg.copy()
@@ -25,3 +25,5 @@ ImageDraw.Draw(mask).rounded_rectangle((40, 40, S - 40, S - 40), radius=200, fil
 icon = Image.new("RGBA", (S, S), (0, 0, 0, 0))
 icon.paste(img, (0, 0), mask)
 icon.save(out)
+if len(sys.argv) > 2:  # Windows simgesi
+    icon.save(sys.argv[2], sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])

@@ -6,6 +6,7 @@ from ayrim import __version__
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 ICON = os.path.join(ROOT, "build", "Ayrim.icns")
+ICO = os.path.join(ROOT, "build", "Ayrim.ico")
 
 # Kullanılmayan büyük Qt modülleri paketten çıkarılır.
 EXCLUDES = [
@@ -26,6 +27,7 @@ exe = EXE(
     name="Ayrim",
     console=False,
     target_arch="arm64" if sys.platform == "darwin" else None,
+    icon=ICO if sys.platform == "win32" and os.path.exists(ICO) else None,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="Ayrim")
 

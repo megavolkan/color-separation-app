@@ -83,3 +83,16 @@ def test_cache_reuse(renderer, fixtures_dir):
     mtime = a.composite.stat().st_mtime
     b = renderer.render(fixtures_dir / "basic.pdf", 1, DPI)
     assert a.directory == b.directory and b.composite.stat().st_mtime == mtime
+
+
+def test_special_spot_names(renderer, tmp_path):
+    from make_fixtures import SPECIAL_SPOTS, special_names_pdf
+
+    pdf = tmp_path / "special.pdf"
+    special_names_pdf(pdf)
+    names = [s.name for s in load_separations(renderer.render(pdf, 1, DPI))]
+    assert names[4:] == sorted(SPECIAL_SPOTS, key=str.casefold)
+    # PDF'ten okunan adlar Ghostscript'in dosya adlarından çözülenlerle aynı olmalı
+    from ayrim.pdfinfo import read_pdf_info
+
+    assert set(read_pdf_info(pdf).spot_colors) == set(SPECIAL_SPOTS)

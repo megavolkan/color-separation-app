@@ -26,6 +26,30 @@ bırakabilir veya Finder'da sağ tık > **Birlikte Aç > Ayrım** ile açabilirs
 Ghostscript uygulamaya gömülü değildir, Homebrew'daki `gs` kullanılır. Kod
 değiştiğinde betiği yeniden çalıştırmak yeterlidir.
 
+### Windows
+
+[Ghostscript'in 64 bit Windows sürümünü](https://ghostscript.com/releases/gsdnld.html) ve
+`uv`'yi (`winget install --id=astral-sh.uv -e`) kurun. Ardından PowerShell'de:
+
+```powershell
+.\packaging\build_windows.ps1
+```
+
+`dist\Ayrim\Ayrim.exe` oluşur; klasörün tamamını istediğiniz yere taşıyabilirsiniz.
+
+### Hazır paketler (GitHub Actions)
+
+Depo GitHub'a gönderildiğinde `.github/workflows/build.yml` testleri çalıştırır ve macOS,
+Windows ve Linux paketlerini üretir (Actions sekmesinde "Artifacts"). `v0.2.0` gibi bir
+etiket gönderildiğinde paketler bir GitHub sürümü (Release) olarak yayınlanır:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+Paketler imzasızdır. macOS'ta ilk açılışta sağ tık > **Aç**, Windows'ta SmartScreen
+uyarısında **Ek bilgi > Yine de çalıştır** gerekir. Ghostscript her sistemde ayrıca kurulmalıdır.
+
 Linux (Arch/CachyOS): `sudo pacman -S ghostscript uv`, sonra aynı komutlar.
 
 ## Kullanım

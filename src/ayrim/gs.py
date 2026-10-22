@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import glob
 import hashlib
 import os
 import shutil
@@ -19,11 +20,30 @@ _EXTRA_GS_PATHS = [
     "/usr/bin/gs",
 ]
 
+# Windows'ta Ghostscript kurulumu C:\Program Files\gs\gs<sürüm>\bin altına gider.
+_WINDOWS_GS_GLOBS = [
+    r"C:\Program Files\gs\gs*\bin\gswin64c.exe",
+    r"C:\Program Files (x86)\gs\gs*\bin\gswin32c.exe",
+]
+_GS_NAMES = ("gswin64c", "gswin32c", "gs") if sys.platform == "win32" else ("gs",)
+
 # -sOverprint ayarı Ghostscript 9.53+ ile geldi; -dSimulateOverprint artık desteklenmiyor.
 MIN_GS_VERSION = (9, 53)
 
 # Ghostscript çağrı biçimi değişince artırılır; eski önbellek kullanılmaz.
 CACHE_VERSION = 2
+
+
+# Windows'ta her Ghostscript çağrısında konsol penceresi açılmasın.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def _version_key(path: str) -> tuple[int, ...]:
+    """'...\\gs10.04.0\\bin\\gswin64c.exe' → (10, 4, 0)"""
+    for part in Path(path).parts:
+        if part.lower().startswith("gs") and part[2:3].isdigit():
+            return tuple(int(p) for p in part[2:].split(".") if p.isdigit())
+    return ()
 
 
 class GhostscriptError(RuntimeError):
@@ -50,16 +70,27 @@ def find_ghostscript() -> Ghostscript:
     env = os.environ.get("AYRIM_GS")
     if env:
         candidates.append(env)
-    which = shutil.which("gs")
-    if which:
-        candidates.append(which)
-    candidates += _EXTRA_GS_PATHS
+    for name in _GS_NAMES:
+        which = shutil.which(name)
+        if which:
+            candidates.append(which)
+    if sys.platform == "win32":
+        for pattern in _WINDOWS_GS_GLOBS:
+            # en yeni sürüm önce
+            candidates += sorted(glob.glob(pattern), key=_version_key, reverse=True)
+    else:
+        candidates += _EXTRA_GS_PATHS
     for path in candidates:
         if not (os.path.isfile(path) and os.access(path, os.X_OK)):
             continue
         try:
             out = subprocess.run(
-                [path, "--version"], capture_output=True, text=True, timeout=10, check=True
+                [path, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=True,
+                creationflags=_NO_WINDOW,
             )
         except (OSError, subprocess.SubprocessError):
             continue
@@ -70,15 +101,18 @@ def find_ghostscript() -> Ghostscript:
                 f"{'.'.join(map(str, MIN_GS_VERSION))} gerekli."
             )
         return gs
-    hint = (
-        "brew install ghostscript" if sys.platform == "darwin" else "pacman -S ghostscript"
-    )
+    hint = {
+        "darwin": "brew install ghostscript",
+        "win32": "https://ghostscript.com/releases/gsdnld.html adresinden 64 bit Windows sürümünü kurun",
+    }.get(sys.platform, "pacman -S ghostscript")
     raise GhostscriptNotFound(f"Ghostscript (gs) bulunamadı. Kurulum: {hint}")
 
 
 def default_cache_dir() -> Path:
     if sys.platform == "darwin":
         base = Path.home() / "Library" / "Caches"
+    elif sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
     else:
         base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
     return base / "ayrim"
@@ -157,7 +191,7 @@ class Renderer:
             str(tmp / f"p{page}.tif"),
             str(pdf),
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace", creationflags=_NO_WINDOW)
         if proc.returncode != 0 or not (tmp / f"p{page}.tif").exists():
             shutil.rmtree(tmp, ignore_errors=True)
             msg = (proc.stderr or proc.stdout).strip()
