@@ -22,6 +22,9 @@ _EXTRA_GS_PATHS = [
 # -sOverprint ayarı Ghostscript 9.53+ ile geldi; -dSimulateOverprint artık desteklenmiyor.
 MIN_GS_VERSION = (9, 53)
 
+# Ghostscript çağrı biçimi değişince artırılır; eski önbellek kullanılmaz.
+CACHE_VERSION = 2
+
 
 class GhostscriptError(RuntimeError):
     pass
@@ -124,7 +127,7 @@ class Renderer:
 
     def cache_path(self, pdf: Path, page: int, dpi: int, overprint: bool) -> Path:
         op = "op" if overprint else "noop"
-        return self.cache_dir / self._hash(pdf)[:24] / f"p{page}_{dpi}dpi_{op}"
+        return self.cache_dir / self._hash(pdf)[:24] / f"v{CACHE_VERSION}_p{page}_{dpi}dpi_{op}"
 
     def render(self, pdf: Path | str, page: int, dpi: int = 150, overprint: bool = True) -> RenderResult:
         """Sayfayı işler (önbellekte varsa yeniden işlemez). Sayfa numarası 1'den başlar."""
@@ -146,6 +149,10 @@ class Renderer:
             f"-dFirstPage={page}",
             f"-dLastPage={page}",
             f"-sOverprint={'simulate' if overprint else 'disable'}",
+            # Gömülü ICC profillerini yok say: ICCBased CMYK değerleri (Affinity, PDF/X)
+            # Ghostscript'in kendi CMYK profiline dönüştürülmeden olduğu gibi kalıplara gider.
+            # Bu olmadan 0/100/100/0 bir renk örneğin 2/79/100/0 olarak ölçülüyordu.
+            "-dOverrideICC",
             "-o",
             str(tmp / f"p{page}.tif"),
             str(pdf),

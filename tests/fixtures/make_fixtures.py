@@ -189,3 +189,29 @@ multipage_pdf()
 if __name__ == "__main__":
     for n in EXPECTED:
         print("yazıldı:", HERE / n)
+
+
+def icc_cmyk_pdf(path: Path, profile: bytes) -> list[tuple[Box, dict[str, float]]]:
+    """ICCBased CMYK renk uzayıyla boyanmış kutular (Affinity PDF/X dışa aktarımı gibi).
+
+    Profil depoya konmaz; testler Ghostscript'in kendi CMYK profilini kullanır.
+    """
+    w = PdfWriter()
+    pages = w.reserve()
+    icc = w.add(f"<< /N 4 /Length {len(profile)} >>\nstream\n".encode() + profile + b"\nendstream")
+    cs = w.add(f"[/ICCBased {icc} 0 R]")
+    boxes = [
+        ((20, 20, 100, 100), (0, 1, 1, 0)),
+        ((150, 20, 100, 100), (0.5, 0.2, 0, 0.1)),
+        ((20, 150, 100, 100), (0.6, 0.4, 0.4, 1)),
+    ]
+    c = "".join(f"/CS0 cs {' '.join(f'{v:g}' for v in cmyk)} scn\n" + rect(*b) for b, cmyk in boxes)
+    content = w.stream(c)
+    page = w.add(
+        f"<< /Type /Page /Parent {pages} 0 R /MediaBox [0 0 {PAGE} {PAGE}] "
+        f"/Resources << /ColorSpace << /CS0 {cs} 0 R >> >> /Contents {content} 0 R >>"
+    )
+    w.set(pages, f"<< /Type /Pages /Kids [{page} 0 R] /Count 1 >>")
+    w.write(path, w.add(f"<< /Type /Catalog /Pages {pages} 0 R >>"))
+    names = ("Cyan", "Magenta", "Yellow", "Black")
+    return [(b, {n: v * 100 for n, v in zip(names, cmyk)}) for b, cmyk in boxes]
