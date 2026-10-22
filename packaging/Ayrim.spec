@@ -42,7 +42,7 @@ if sys.platform == "darwin":
             "CFBundleDisplayName": "Ayrım",
             "CFBundleName": "Ayrım",
             "CFBundleShortVersionString": __version__,
-            "LSMinimumSystemVersion": "12.0",
+            "LSMinimumSystemVersion": "15.0",  # pikepdf yalnızca macOS 15+ için hazır paket sunuyor
             "NSHighResolutionCapable": True,
             "CFBundleDocumentTypes": [
                 {
