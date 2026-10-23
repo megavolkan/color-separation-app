@@ -38,6 +38,26 @@ CACHE_VERSION = 2
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
+def subprocess_env() -> dict[str, str] | None:
+    """Dış programlar için ortam değişkenleri.
+
+    PyInstaller ile paketlenmiş Linux uygulaması LD_LIBRARY_PATH'i kendi kütüphane
+    klasörüne çevirir. Sistemdeki gs bu ayarla çalıştırılırsa paketin içindeki (derlendiği
+    dağıtımdan gelen) eski kütüphaneleri yükler ve başka dağıtımlarda (ör. Arch/CachyOS)
+    açılamaz. Bu yüzden özgün değer geri yüklenir.
+    """
+    if not getattr(sys, "frozen", False) or sys.platform in ("win32", "darwin"):
+        return None
+    env = dict(os.environ)
+    for var in ("LD_LIBRARY_PATH",):
+        orig = env.pop(var + "_ORIG", None)
+        if orig is not None:
+            env[var] = orig
+        else:
+            env.pop(var, None)
+    return env
+
+
 def _version_key(path: str) -> tuple[int, ...]:
     """'...\\gs10.04.0\\bin\\gswin64c.exe' → (10, 4, 0)"""
     for part in Path(path).parts:
@@ -80,7 +100,8 @@ def find_ghostscript() -> Ghostscript:
             candidates += sorted(glob.glob(pattern), key=_version_key, reverse=True)
     else:
         candidates += _EXTRA_GS_PATHS
-    for path in candidates:
+    failures = []
+    for path in dict.fromkeys(candidates):  # sırayı koruyarak tekrarları at
         if not (os.path.isfile(path) and os.access(path, os.X_OK)):
             continue
         try:
@@ -88,11 +109,17 @@ def find_ghostscript() -> Ghostscript:
                 [path, "--version"],
                 capture_output=True,
                 text=True,
+                errors="replace",
                 timeout=10,
                 check=True,
+                env=subprocess_env(),
                 creationflags=_NO_WINDOW,
             )
-        except (OSError, subprocess.SubprocessError):
+        except subprocess.CalledProcessError as e:
+            failures.append(f"{path}: {(e.stderr or e.stdout or '').strip()[-500:] or e}")
+            continue
+        except (OSError, subprocess.SubprocessError) as e:
+            failures.append(f"{path}: {e}")
             continue
         gs = Ghostscript(path, out.stdout.strip())
         if gs.version_tuple < MIN_GS_VERSION:
@@ -105,6 +132,9 @@ def find_ghostscript() -> Ghostscript:
         "darwin": "brew install ghostscript",
         "win32": "https://ghostscript.com/releases/gsdnld.html adresinden 64 bit Windows sürümünü kurun",
     }.get(sys.platform, "pacman -S ghostscript")
+    if failures:
+        # gs var ama çalışmadı: "bulunamadı" demek yanıltıcı olur
+        raise GhostscriptNotFound("Ghostscript bulundu ama çalıştırılamadı:\n" + "\n".join(failures))
     raise GhostscriptNotFound(f"Ghostscript (gs) bulunamadı. Kurulum: {hint}")
 
 
@@ -191,7 +221,14 @@ class Renderer:
             str(tmp / f"p{page}.tif"),
             str(pdf),
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace", creationflags=_NO_WINDOW)
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            env=subprocess_env(),
+            creationflags=_NO_WINDOW,
+        )
         if proc.returncode != 0 or not (tmp / f"p{page}.tif").exists():
             shutil.rmtree(tmp, ignore_errors=True)
             msg = (proc.stderr or proc.stdout).strip()
