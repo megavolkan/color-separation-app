@@ -1,10 +1,13 @@
 # PyInstaller tanımı: `uv run --group build pyinstaller packaging/Ayrim.spec`
 import os
 import sys
+import tomllib
 
-from ayrim import __version__
+from PyInstaller.utils.hooks import copy_metadata
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
+with open(os.path.join(ROOT, "pyproject.toml"), "rb") as f:
+    __version__ = tomllib.load(f)["project"]["version"]
 ICON = os.path.join(ROOT, "build", "Ayrim.icns")
 ICO = os.path.join(ROOT, "build", "Ayrim.ico")
 
@@ -19,6 +22,7 @@ a = Analysis(
     [os.path.join(SPECPATH, "run_ayrim.py")],
     pathex=[os.path.join(ROOT, "src")],
     excludes=EXCLUDES,
+    datas=copy_metadata("ayrim"),  # uygulama içinde ayrim.__version__ için
 )
 pyz = PYZ(a.pure)
 exe = EXE(

@@ -40,12 +40,10 @@ değiştiğinde betiği yeniden çalıştırmak yeterlidir.
 ### Hazır paketler (GitHub Actions)
 
 Depo GitHub'a gönderildiğinde `.github/workflows/build.yml` testleri çalıştırır ve macOS,
-Windows ve Linux paketlerini üretir (Actions sekmesinde "Artifacts"). `v0.2.0` gibi bir
-etiket gönderildiğinde paketler bir GitHub sürümü (Release) olarak yayınlanır:
-
-```sh
-git tag v0.2.0 && git push origin v0.2.0
-```
+Windows ve Linux paketlerini üretir (Actions sekmesinde "Artifacts"). Yeni bir sürüm
+yayınlamak için `pyproject.toml` içindeki `version` değerini artırıp (ör. `0.1.1` → `0.1.2`)
+gönderin: o sürümün etiketi (`v0.1.2`) henüz yoksa iş akışı etiketi oluşturur ve paketleri
+GitHub Releases'ta yayınlar. Sürüm numarası değişmeyen gönderimler yalnızca derlenir.
 
 Paketler imzasızdır. macOS'ta ilk açılışta sağ tık > **Aç**, Windows'ta SmartScreen
 uyarısında **Ek bilgi > Yine de çalıştır** gerekir. Ghostscript her sistemde ayrıca kurulmalıdır.
