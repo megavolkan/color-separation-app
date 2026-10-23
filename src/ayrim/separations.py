@@ -68,6 +68,9 @@ class Separation:
 def load_separations(result: RenderResult) -> list[Separation]:
     """Kalıpları okur: önce CMYK (sırasıyla), sonra spot renkler alfabetik."""
     files = separation_files(result)
+    if not files:
+        produced = ", ".join(sorted(f.name for f in result.directory.iterdir())) or "hiçbir dosya"
+        raise ValueError(f"{result.directory} içinde kalıp dosyası yok. Bulunanlar: {produced}")
     order = [n for n in PROCESS_NAMES if n in files]
     order += sorted((n for n in files if n not in PROCESS_NAMES), key=str.casefold)
     seps = []

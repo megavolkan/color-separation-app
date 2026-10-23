@@ -96,3 +96,11 @@ def test_special_spot_names(renderer, tmp_path):
     from ayrim.pdfinfo import read_pdf_info
 
     assert set(read_pdf_info(pdf).spot_colors) == set(SPECIAL_SPOTS)
+
+
+def test_missing_plates_is_an_error(tmp_path):
+    from ayrim.gs import RenderResult
+
+    (tmp_path / "p1.tif").touch()
+    with pytest.raises(ValueError, match="kalıp dosyası yok.*p1.tif"):
+        load_separations(RenderResult(tmp_path, 1, DPI, True))
