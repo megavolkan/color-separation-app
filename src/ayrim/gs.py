@@ -233,7 +233,7 @@ class Renderer:
             shutil.rmtree(tmp, ignore_errors=True)
             msg = (proc.stderr or proc.stdout).strip()
             raise GhostscriptError(f"Ghostscript sayfa {page} işlenemedi: {msg[-2000:]}")
-        if not any(f.name.startswith(f"p{page}(") for f in tmp.iterdir()):
+        if not any(f.name.startswith((f"p{page}(", f"p{page}.tif(")) for f in tmp.iterdir()):
             # Kalıp dosyası yoksa boş sayfa göstermek yerine ne üretildiğini söyle.
             produced = ", ".join(sorted(f.name for f in tmp.iterdir())) or "hiçbir dosya"
             shutil.rmtree(tmp, ignore_errors=True)

@@ -104,3 +104,17 @@ def test_missing_plates_is_an_error(tmp_path):
     (tmp_path / "p1.tif").touch()
     with pytest.raises(ValueError, match="kalıp dosyası yok.*p1.tif"):
         load_separations(RenderResult(tmp_path, 1, DPI, True))
+
+
+def test_gs_10_08_file_names(tmp_path):
+    """gs 10.08 kalıpları 'p1.tif(Cyan).tif' diye adlandırır."""
+    from PIL import Image
+
+    from ayrim.gs import RenderResult
+
+    Image.new("L", (4, 4), 255).save(tmp_path / "p1.tif")
+    for name in ("Cyan", "Black", "Spot Gold. 871%2FC"):
+        Image.new("L", (4, 4), 0).save(tmp_path / f"p1.tif({name}).tif")
+    seps = load_separations(RenderResult(tmp_path, 1, DPI, True))
+    assert [s.name for s in seps] == ["Cyan", "Black", "Spot Gold. 871/C"]
+    assert seps[0].ink.min() == 1.0

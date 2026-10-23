@@ -37,13 +37,18 @@ def decode_separation_name(encoded: str) -> str:
 
 
 def separation_files(result: RenderResult) -> dict[str, Path]:
-    """Kalıp adı → tiff dosyası. Ad, 'p<N>(' öneki ile ').tif' soneki arasındaki her şeydir."""
-    prefix = f"{result.stem}("
+    """Kalıp adı → tiff dosyası. Ad, 'p<N>(' öneki ile ').tif' soneki arasındaki her şeydir.
+
+    Ghostscript 10.08 öneke çıktı dosyasının uzantısını da katar: 'p1.tif(Cyan).tif'.
+    """
+    prefixes = (f"{result.stem}(", f"{result.composite.name}(")
     out: dict[str, Path] = {}
     for f in result.directory.iterdir():
         n = f.name
-        if n.startswith(prefix) and n.endswith(").tif"):
-            out[decode_separation_name(n[len(prefix) : -len(").tif")])] = f
+        for prefix in prefixes:
+            if n.startswith(prefix) and n.endswith(").tif"):
+                out[decode_separation_name(n[len(prefix) : -len(").tif")])] = f
+                break
     return out
 
 
