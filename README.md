@@ -54,7 +54,8 @@ Linux (Arch/CachyOS): `sudo pacman -S ghostscript uv`, sonra aynı komutlar.
 
 - **Dosya > Aç…** (⌘O) ya da PDF'i pencereye sürükleyin.
 - Sağdaki listede kalıpları anahtarlarla açıp kapatın; kalıp adının yanında sayfadaki ortalama
-  kapsama oranı yazar. O sayfada üste baskı (overprint) ile basılan kalıpların yanında **OP** işareti çıkar. Satırın sağındaki renk kutusuna tıklayarak kalıbın ekran rengini değiştirebilirsiniz
+  kapsama oranı yazar. O sayfada üste baskı (overprint) ile basılan kalıpların yanında **OP** işareti çıkar.
+  Etkisi olmayan üste baskı (altında mürekkep olmayan zemin, kayıt rengindeki kesim işaretleri) sayılmaz. Satırın sağındaki renk kutusuna tıklayarak kalıbın ekran rengini değiştirebilirsiniz
   (rengi PDF'ten okunamayan spotlar için).
 - Tek kalıp seçiliyken **Tek kalıbı gri göster** ile kalıp gri tonlu görünür.
 - İmleci sayfada gezdirin: alttaki panel her kalıbın yüzdesini ve toplam mürekkebi (TAC) gösterir.

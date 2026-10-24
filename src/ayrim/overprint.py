@@ -2,6 +2,10 @@
 
 Sayfanın içerik akışı grafik durumu izlenerek okunur: ExtGState'teki /OP (çizgi) ve /op
 (dolgu) açıkken boyanan her nesnenin rengi, hangi kalıplara mürekkep koyduğuna çevrilir.
+
+Etkisi olmayan üste baskı sayılmaz: altında henüz mürekkep yokken boyanan nesne (örn. zemin) ve
+kayıt rengiyle (/All) çizilen kesim/kayıt işaretleri. Affinity gibi programlar bunlara üste baskı
+bayrağı koyar ama baskı sonucunu değiştirmez.
 Sonuç kalıp adlarıdır (Cyan, Magenta, Yellow, Black ve spot adları), Ghostscript'in
 kalıp adlarıyla aynıdır.
 """
@@ -55,8 +59,8 @@ def _initial_values(space) -> tuple[float, ...]:
     return (0.0,)
 
 
-def inks_of(space, values: tuple[float, ...]) -> set[str]:
-    """Bu renk hangi kalıplara mürekkep koyar?"""
+def inks_of(space, values: tuple[float, ...], registration: bool = True) -> set[str]:
+    """Bu renk hangi kalıplara mürekkep koyar? registration=False ise kayıt rengi (/All) yok sayılır."""
     v = list(values)
     if isinstance(space, pikepdf.Name):
         s = str(space)
@@ -73,22 +77,23 @@ def inks_of(space, values: tuple[float, ...]) -> set[str]:
         if name == "None" or not v or v[0] <= 0:
             return set()
         if name == "All":
-            return set(PROCESS_NAMES)
+            return set(PROCESS_NAMES) if registration else set()
         return {name}
     if kind == "DeviceN":
         return {name_str(n) for n, x in zip(space[1], v) if x > 0 and name_str(n) != "None"}
     if kind == "ICCBased":
         n = int(space[1].get("/N", 0))
         if n == 4:
-            return inks_of(pikepdf.Name("/DeviceCMYK"), values)
+            return inks_of(pikepdf.Name("/DeviceCMYK"), values, registration)
         if n == 1:
-            return inks_of(pikepdf.Name("/DeviceGray"), values)
+            return inks_of(pikepdf.Name("/DeviceGray"), values, registration)
     return set()
 
 
 class _Scanner:
     def __init__(self) -> None:
         self.inks: set[str] = set()
+        self.painted = False  # sayfaya şimdiye kadar mürekkep kondu mu
         self._depth = 0
 
     def run(self, stream, resources, state: _State) -> None:
@@ -119,8 +124,14 @@ class _Scanner:
         return pikepdf.Name(name)
 
     def _paint(self, color: _Color, active: bool) -> None:
-        if active:
-            self.inks |= inks_of(color.space, color.values)
+        self._overprint(color.space, color.values, active)
+
+    def _overprint(self, space, values, active: bool) -> None:
+        # Altında mürekkep yoksa üste baskının etkisi olmaz; kayıt rengi baskı işaretidir.
+        if active and self.painted:
+            self.inks |= inks_of(space, values, registration=False)
+        if inks_of(space, values):
+            self.painted = True
 
     def _step(self, op, operands, st: _State, stack: list[_State], resources) -> _State:
         if op == "q":
@@ -171,12 +182,12 @@ class _Scanner:
                 self._paint(st.fill, st.op_fill)
             if mode in (1, 2):
                 self._paint(st.stroke, st.op_stroke)
-        elif op == "sh" and st.op_fill:
+        elif op == "sh":
             sh = resources.get("/Shading", {}).get(str(operands[0]))
             if isinstance(sh, (pikepdf.Dictionary, pikepdf.Stream)):
                 space = sh.get("/ColorSpace")
                 n = len(space[1]) if isinstance(space, pikepdf.Array) and name_str(space[0]) == "DeviceN" else 4
-                self.inks |= inks_of(space, (1.0,) * n)
+                self._overprint(space, (1.0,) * n, st.op_fill)
         elif op == "Do":
             xo = resources.get("/XObject", {}).get(str(operands[0]))
             if isinstance(xo, pikepdf.Stream):

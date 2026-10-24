@@ -28,9 +28,12 @@ def overprint_pdf(path, content: str, form: str | None = None) -> None:
     w.write(path, w.add(f"<< /Type /Catalog /Pages {pages} 0 R >>"))
 
 
-def inks(tmp_path, content, form=None):
+BACKGROUND = "0 0 0.1 0 k 0 0 300 300 re f\n"  # üste baskının etkisi olsun diye altta mürekkep
+
+
+def inks(tmp_path, content, form=None, background=BACKGROUND):
     pdf = tmp_path / "op.pdf"
-    overprint_pdf(pdf, content, form)
+    overprint_pdf(pdf, background + content, form)
     return list(read_doc_details(pdf).pages[0].overprint)
 
 
@@ -57,6 +60,32 @@ def test_inside_form_xobject(tmp_path):
     assert inks(tmp_path, content, form) == ["Black"]
 
 
+def test_ineffective_overprint_ignored(tmp_path):
+    # Affinity çıktısı gibi: en alttaki spot zemin üste baskılı ama altında hiçbir şey yok;
+    # kesim işaretleri kayıt rengiyle (/All) üste baskılı çiziliyor. İkisi de baskıyı değiştirmez.
+    w = PdfWriter()
+    pages = w.reserve()
+    spot = separation_cs(w, "PANTONE 185 C")
+    fn = w.add("<< /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >>")
+    reg = w.add(f"[/Separation /All /DeviceGray {fn} 0 R]")
+    gs0 = w.add("<< /Type /ExtGState /OP false /op true /OPM 1 >>")
+    gs5 = w.add("<< /Type /ExtGState /OP true /op false /OPM 1 >>")
+    content = w.stream(
+        "/GS0 gs /C4 cs 1 scn 0 0 300 300 re f\n"
+        "/GS5 gs /C5 CS 1 SCN 5 5 m 20 5 l S\n"
+    )
+    page = w.add(
+        f"<< /Type /Page /Parent {pages} 0 R /MediaBox [0 0 {PAGE} {PAGE}] "
+        f"/Resources << /ColorSpace << /C4 {spot} 0 R /C5 {reg} 0 R >> "
+        f"/ExtGState << /GS0 {gs0} 0 R /GS5 {gs5} 0 R >> >> /Contents {content} 0 R >>"
+    )
+    w.set(pages, f"<< /Type /Pages /Kids [{page} 0 R] /Count 1 >>")
+    pdf = tmp_path / "affinity.pdf"
+    w.write(pdf, w.add(f"<< /Type /Catalog /Pages {pages} 0 R >>"))
+    assert read_doc_details(pdf).overprint == []
+
+
 def test_no_overprint(tmp_path, fixtures_dir):
     assert inks(tmp_path, "0 0 0 1 k 10 10 50 50 re f") == []
+    assert inks(tmp_path, "/GSop gs 0 0 0 1 k 10 10 50 50 re f", background="") == []
     assert read_doc_details(fixtures_dir / "basic.pdf").overprint == ["PANTONE 185 C"]
