@@ -84,8 +84,8 @@ def test_info_panel_and_close(app, renderer, tmp_path, fixtures_dir):
     assert wait_for(app, lambda: win.seps and win.info_panel.details)
     lines = win.info_panel.text().splitlines()
     for part in ("Sürüm:", "1.6", "PDF/X-4", "FOGRA39", "Artifex PS CMYK Profile (CMYK, ICC 4.2)",
-                 "Kesim (TrimBox):", "95.2 × 95.2 mm", "Taşma payı:", "3.0 mm", "Gelecek:",
-                 "TrueType · gömülü, alt küme", "Helvetica:", "Type1 · gömülü değil"):
+                 "Kesim (TrimBox):", "95.2 × 95.2 mm", "Taşma payı:", "3.0 mm", "Gelecek",
+                 "TrueType · gömülü, alt küme", "Helvetica", "Type1 · gömülü değil"):
         assert part in lines, part
     assert any(line.startswith("ICC RGB RGB nesneler") for line in lines)
 

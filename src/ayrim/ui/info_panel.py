@@ -52,6 +52,10 @@ INFO_KEYS = {
 Rows = list[tuple[str, str]]  # (anahtar, değer HTML'i)
 
 
+class Stacked(list):
+    """Tablo yerine alt alta gösterilen satırlar: anahtar, altında küçük italik ayrıntı."""
+
+
 def _profile(p: IccProfile) -> str:
     return f"{escape(p.name)} ({p.color_space}, ICC {p.version})"
 
@@ -114,7 +118,7 @@ def sections(d: DocDetails, page: int, t: Theme) -> list[tuple[str, Rows | str]]
             boxes.append(("Döndürme", f"{pb.rotate}°"))
         out.append((f"Sayfa {page} Kutuları", boxes))
 
-    fonts: Rows = []
+    fonts = Stacked()
     for f in d.fonts:
         state = ("gömülü, alt küme" if f.subset else "gömülü") if f.embedded else accent("gömülü değil")
         fonts.append((escape(f.name), f"{escape(f.subtype)} · {state}"))
@@ -197,6 +201,23 @@ class InfoPanel(QScrollArea):
         lay.setContentsMargins(PADDING, PADDING, PADDING, PADDING)
         lay.setSpacing(PADDING)
         lay.addWidget(_label(escape(title) + ":", "sectionTitle"))
+        if isinstance(rows, Stacked):
+            # Uzun yazı tipi adları değeri sıkıştırmasın diye ad ve ayrıntı alt alta.
+            items = QVBoxLayout()
+            items.setContentsMargins(0, 0, 0, 0)
+            items.setSpacing(6)
+            for key, value in rows:
+                item = QVBoxLayout()
+                item.setSpacing(1)
+                name = _label(key, "key")
+                name.setWordWrap(True)
+                detail = _label(value, "detail")
+                detail.setWordWrap(True)
+                item.addWidget(name)
+                item.addWidget(detail)
+                items.addLayout(item)
+            lay.addLayout(items)
+            return box
         if isinstance(rows, str):
             lay.addWidget(_label(escape(rows), "muted"))
             return box

@@ -1,6 +1,6 @@
 [project]
 name = "ayrim"
-version = "0.4.2"
+version = "0.4.3"
 description = "PDF renk ayrımı önizleyicisi (CMYK + spot), Ghostscript tiffsep tabanlı"
 readme = "README.md"
 requires-python = ">=3.12"

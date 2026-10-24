@@ -135,6 +135,7 @@ def stylesheet(t: Theme) -> str:
     QLabel#sectionTitle {{ color: {t.text}; font-size: 13px; font-weight: bold; }}
     QLabel#key {{ color: {t.key}; font-size: 11px; }}
     QLabel#value {{ color: {t.text}; font-size: 11px; font-weight: bold; }}
+    QLabel#detail {{ color: {t.text}; font-size: 10px; font-style: italic; font-weight: 300; }}
     QLabel#muted {{ color: {t.key}; font-size: 11px; font-style: italic; }}
     """
 
