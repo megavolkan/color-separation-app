@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QThreadPool, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDockWidget,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QToolBar,
     QVBoxLayout,
@@ -29,6 +31,7 @@ from ..separations import Separation
 from .info_panel import InfoPanel
 from .page_view import PageView
 from .plate_list import PlateList
+from .theme import DARK, LIGHT, Theme, apply_theme, save_theme, saved_theme
 from .worker import DetailsTask, RenderTask
 
 UNKNOWN_SPOT_RGB: RGB = (0.6, 0.6, 0.6)
@@ -80,6 +83,7 @@ class MainWindow(QMainWindow):
         self._build_readout_dock()
         self._build_info_dock()
         self._build_toolbar()
+        self.set_theme(saved_theme(), save=False)
         self.statusBar().showMessage(f"Ghostscript {renderer.gs.version} — {renderer.gs.path}")
         self._update_nav()
 
@@ -105,7 +109,8 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.close_act)
         info_act = self.info_dock.toggleViewAction()
         info_act.setShortcut(QKeySequence("Ctrl+I"))
-        self.menuBar().addMenu("Görünüm").addAction(info_act)
+        view_menu = self.menuBar().addMenu("Görünüm")
+        view_menu.addAction(info_act)
         tb.addSeparator()
 
         self.prev_act = QAction("◀", self)
@@ -144,6 +149,33 @@ class MainWindow(QMainWindow):
         self.gray_box.setToolTip("Yalnızca bir kalıp seçiliyken o kalıbı gri tonlu gösterir.")
         self.gray_box.toggled.connect(self.refresh_preview)
         tb.addWidget(self.gray_box)
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        tb.addWidget(spacer)
+        self.theme_act = QAction("Koyu tema", self)
+        self.theme_act.setCheckable(True)
+        self.theme_act.setShortcut(QKeySequence("Ctrl+Shift+T"))
+        self.theme_act.toggled.connect(lambda dark: self.set_theme(DARK if dark else LIGHT))
+        tb.addAction(self.theme_act)
+        view_menu.addSeparator()
+        view_menu.addAction(self.theme_act)
+
+    def set_theme(self, theme: Theme, save: bool = True) -> None:
+        """Açık/koyu temayı tüm uygulamaya uygular."""
+        self.theme = theme
+        app = QApplication.instance()
+        if app is not None:
+            apply_theme(app, theme)
+        self.view.set_colors(theme.bg, theme.page_outline)
+        self.info_panel.set_theme(theme)
+        self.theme_act.blockSignals(True)
+        self.theme_act.setChecked(theme.is_dark)
+        self.theme_act.blockSignals(False)
+        self.theme_act.setIconText("☀ Açık" if theme.is_dark else "☾ Koyu")
+        self.theme_act.setToolTip("Açık temaya geç" if theme.is_dark else "Koyu temaya geç")
+        if save:
+            save_theme(theme)
 
     def _build_plate_dock(self) -> None:
         dock = QDockWidget("Kalıplar", self)

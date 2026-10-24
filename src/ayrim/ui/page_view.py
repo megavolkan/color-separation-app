@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import numpy as np
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
-from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsScene, QGraphicsView
 
 # Bu büyütmenin üstünde pikseller yumuşatılmadan gösterilir (ölçüm için net kenarlar).
 SHARP_ABOVE = 2.0
@@ -32,6 +32,12 @@ class PageView(QGraphicsView):
         self.setScene(QGraphicsScene(self))
         self._item = QGraphicsPixmapItem()
         self.scene().addItem(self._item)
+        # Sayfa kenarı: açık temada beyaz sayfa beyaz zeminden bu çizgiyle ayrılır.
+        self._frame = QGraphicsRectItem()
+        self._frame.setBrush(Qt.BrushStyle.NoBrush)
+        self._frame.setZValue(1)
+        self._frame.hide()
+        self.scene().addItem(self._frame)
         self.setBackgroundBrush(QColor(80, 80, 80))
         self.setMouseTracking(True)
         # Bırakılan dosyalar ana pencereye geçsin (QGraphicsView varsayılan olarak yutar).
@@ -48,16 +54,25 @@ class PageView(QGraphicsView):
         changed = self._page != (width_pt, height_pt)
         self._page = (width_pt, height_pt)
         self.scene().setSceneRect(0, 0, width_pt, height_pt)
+        self._frame.setRect(0, 0, width_pt, height_pt)
         if changed and self._fit:
             self.fit()
 
     def set_image(self, rgb: np.ndarray, dpi: int) -> None:
         self._item.setPixmap(QPixmap.fromImage(qimage_from_rgb(rgb)))
         self._item.setScale(72.0 / dpi)
+        self._frame.show()
         self._update_smoothing()
 
     def clear(self) -> None:
         self._item.setPixmap(QPixmap())
+        self._frame.hide()
+
+    def set_colors(self, background: str, outline: str) -> None:
+        self.setBackgroundBrush(QColor(background))
+        pen = QPen(QColor(outline))
+        pen.setCosmetic(True)  # yakınlaştırmadan bağımsız 1 piksel
+        self._frame.setPen(pen)
 
     def physical_scale(self) -> float:
         """Bir PDF noktasının ekranda kaç fiziksel piksel tuttuğu (Retina dahil)."""

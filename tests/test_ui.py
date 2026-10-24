@@ -82,15 +82,27 @@ def test_info_panel_and_close(app, renderer, tmp_path, fixtures_dir):
     assert not win.close_act.isEnabled()
     win.open_pdf(pdf)
     assert wait_for(app, lambda: win.seps and win.info_panel.details)
-    text = win.info_panel.toPlainText()
-    for part in ("Sürüm: 1.6", "PDF/X-4", "FOGRA39", "Artifex PS CMYK Profile", "ICC RGB", "95.2 × 95.2 mm",
-                 "Taşma payı: 3.0 mm", "Gelecek", "Helvetica", "gömülü değil"):
-        assert part in text, part
+    lines = win.info_panel.text().splitlines()
+    for part in ("Sürüm:", "1.6", "PDF/X-4", "FOGRA39", "Artifex PS CMYK Profile (CMYK, ICC 4.2)",
+                 "Kesim (TrimBox):", "95.2 × 95.2 mm", "Taşma payı:", "3.0 mm", "Gelecek:",
+                 "TrueType · gömülü, alt küme", "Helvetica:", "Type1 · gömülü değil"):
+        assert part in lines, part
+    assert any(line.startswith("ICC RGB RGB nesneler") for line in lines)
+
+    # tema düğmesi tüm uygulamanın arka planını değiştirir
+    from ayrim.ui.theme import DARK, LIGHT
+
+    win.set_theme(LIGHT, save=False)
+    win.theme_act.trigger()
+    assert win.theme is DARK and app.palette().window().color().name() == DARK.bg
+    assert win.view.backgroundBrush().color().name() == DARK.bg
+    win.theme_act.trigger()
+    assert win.theme is LIGHT and app.palette().window().color().name() == LIGHT.bg
 
     win.close_pdf()
     assert not win.seps and win.info is None and not win.plates.rows
     assert win.windowTitle() == "Ayrım" and not win.close_act.isEnabled()
-    assert "Belge açılmadı" in win.info_panel.toPlainText()
+    assert "Belge açılmadı." in win.info_panel.text()
 
     # kapatmadan hemen önce başlayan işleme sonradan gelse de gösterilmez
     win.open_pdf(fixtures_dir / "basic.pdf")

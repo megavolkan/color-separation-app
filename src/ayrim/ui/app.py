@@ -34,6 +34,7 @@ class AyrimApp(QApplication):
 def main() -> int:
     app = AyrimApp(sys.argv)
     app.setApplicationName("Ayrım")
+    app.setOrganizationName("Ayrim")  # tema tercihi QSettings ile saklanır
     try:
         gs = find_ghostscript()
     except GhostscriptError as e:
