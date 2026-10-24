@@ -110,3 +110,27 @@ def test_info_panel_and_close(app, renderer, tmp_path, fixtures_dir):
     wait_for(app, lambda: False, timeout=2.0)
     assert not win.seps and not win.render_cache
     win.close()
+
+
+def test_toolbar_toggles_and_overprint_badge(app, renderer, fixtures_dir):
+    from ayrim.ui.main_window import MainWindow
+    from ayrim.ui.widgets import ToggleSwitch
+
+    win = MainWindow(renderer)
+    win.dpi_combo.setCurrentIndex(win.dpi_combo.findData(72))
+    win.open_pdf(fixtures_dir / "multipage.pdf")
+    assert wait_for(app, lambda: win.seps)
+    assert win.page_label.text() == "1 / 3"
+    assert not win.prev_act.isEnabled() and win.next_act.isEnabled()
+    win.next_act.trigger()
+    assert win.page_label.text() == "2 / 3"
+    # onay kutusu kalmadı; kalıplar ve gri gösterim anahtarla açılıp kapanır
+    assert isinstance(win.gray_box, ToggleSwitch)
+    assert all(isinstance(r.check, ToggleSwitch) for r in win.plates.rows)
+
+    win.open_pdf(fixtures_dir / "basic.pdf")
+    assert wait_for(app, lambda: win.seps and win.info_panel.details)
+    badges = {r.name: not r.op_badge.isHidden() for r in win.plates.rows}
+    assert badges["PANTONE 185 C"] and not badges["Black"]
+    assert "Üste baskı:" in win.info_panel.text().splitlines()
+    win.close()

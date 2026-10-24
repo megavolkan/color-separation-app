@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import tempfile
 from dataclasses import dataclass
-from pathlib import Path
 
-from PySide6.QtCore import QPointF, QSettings, Qt
-from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPalette, QPen, QPixmap
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtGui import QColor, QGuiApplication, QPalette
 from PySide6.QtWidgets import QApplication
+
+from .icons import icon_file
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,10 @@ class Theme:
     border: str  # bölüm ayırıcıları ve kenarlıklar
     control: str  # düğme ve giriş kutusu zemini
     page_outline: str  # sayfanın çevresindeki ince çerçeve
+    button: str  # araç çubuğu düğmeleri
+    button_border: str
+    button_hover: str
+    track: str  # kapalı anahtarın (toggle) zemini
 
     @property
     def is_dark(self) -> bool:
@@ -28,8 +32,14 @@ class Theme:
 
 
 # Renkler kullanıcının verdiği tasarım görsellerinden ölçüldü.
-LIGHT = Theme("light", "#ffffff", "#000000", "#737373", "#6b59a6", "#efefef", "#f5f5f5", "#cfcfcf")
-DARK = Theme("dark", "#1b2933", "#ffffff", "#7695ab", "#75c2f6", "#313e47", "#24333e", "#313e47")
+LIGHT = Theme(
+    "light", "#ffffff", "#000000", "#737373", "#6b59a6", "#efefef", "#f5f5f5", "#cfcfcf",
+    button="#f4f4f5", button_border="#e1e1e3", button_hover="#eaeaec", track="#d4d4d8",
+)
+DARK = Theme(
+    "dark", "#1b2933", "#ffffff", "#7695ab", "#75c2f6", "#313e47", "#24333e", "#313e47",
+    button="#273743", button_border="#354652", button_hover="#30414e", track="#3a4b57",
+)
 THEMES = {t.name: t for t in (LIGHT, DARK)}
 
 _SETTINGS_KEY = "tema"
@@ -85,35 +95,39 @@ def palette(t: Theme) -> QPalette:
     return p
 
 
-def _check_icon(t: Theme) -> str:
-    """Onay işareti resmi; Qt stil sayfası resmi yalnızca dosyadan okuyabildiği için diske yazılır."""
-    path = Path(tempfile.gettempdir()) / f"ayrim-check-{t.name}-{t.bg.lstrip('#')}.png"
-    if not path.exists():
-        pm = QPixmap(28, 28)  # Retina için 2x; stil sayfası kutuya sığdırır
-        pm.fill(Qt.GlobalColor.transparent)
-        p = QPainter(pm)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(QColor(t.bg), 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
-        p.setPen(pen)
-        p.drawPolyline([QPointF(6, 14.5), QPointF(11.5, 20), QPointF(22, 8.5)])
-        p.end()
-        if not pm.save(str(path), "PNG"):
-            return ""
-    return path.as_posix()
-
-
 def stylesheet(t: Theme) -> str:
-    check = _check_icon(t)
+    chevron = icon_file("chevron-down", t.text)
     return f"""
-    QCheckBox::indicator {{ width: 14px; height: 14px; border: 1px solid {t.key}; border-radius: 3px;
-                            background: {t.control}; }}
-    QCheckBox::indicator:checked {{ background: {t.accent}; border-color: {t.accent};
-                                    image: url("{check}"); }}
     QMainWindow, QDockWidget, QScrollArea, QScrollArea > QWidget > QWidget {{ background: {t.bg}; }}
     QMainWindow::separator {{ background: {t.border}; width: 1px; height: 1px; }}
     QDockWidget {{ color: {t.text}; }}
     QDockWidget::title {{ background: {t.bg}; padding: 6px 10px; border-bottom: 1px solid {t.border}; }}
-    QToolBar {{ background: {t.bg}; border: none; border-bottom: 1px solid {t.border}; spacing: 4px; padding: 2px 6px; }}
+    QToolBar {{ background: {t.bg}; border: none; border-bottom: 1px solid {t.border}; spacing: 8px; padding: 8px 10px; }}
+    QToolBar QLabel, QToolBar ToggleSwitch {{ color: {t.text}; font-size: 14px; }}
+    QToolBar QToolButton, QComboBox, QLabel#pageLabel {{
+        color: {t.text}; font-size: 14px; background: {t.button};
+        border: 1px solid {t.button_border}; border-radius: 8px; min-height: 22px; padding: 4px 9px; }}
+    QToolBar QToolButton:hover, QComboBox:hover {{ background: {t.button_hover}; }}
+    QToolBar QToolButton:pressed {{ background: {t.button_border}; }}
+    QToolBar QToolButton:checked {{ border-color: {t.accent}; }}
+    QToolBar QToolButton[plain="true"]:checked {{ border-color: {t.button_border}; }}
+    QToolBar QToolButton:disabled {{ color: {t.key}; }}
+    QToolBar QToolButton[group="left"] {{ border-top-right-radius: 0; border-bottom-right-radius: 0; }}
+    QToolBar QToolButton[group="right"] {{ border-top-left-radius: 0; border-bottom-left-radius: 0; }}
+    QLabel#pageLabel {{ border-radius: 0; border-left: none; border-right: none; padding: 4px 16px; }}
+    QComboBox {{ padding-right: 28px; }}
+    QComboBox::drop-down {{ border: none; width: 26px; }}
+    QComboBox::down-arrow {{ image: url("{chevron}"); width: 12px; height: 12px; }}
+    QComboBox QAbstractItemView {{ background: {t.control}; color: {t.text}; border: 1px solid {t.border};
+        selection-background-color: {t.accent}; selection-color: {t.bg}; outline: none; }}
+    QPushButton {{ color: {t.text}; background: {t.button}; border: 1px solid {t.button_border};
+        border-radius: 8px; padding: 5px 10px; font-size: 13px; }}
+    QPushButton:hover {{ background: {t.button_hover}; }}
+    QPushButton:pressed {{ background: {t.button_border}; }}
+    QFrame#toolbarLine {{ background: {t.border}; border: none; min-width: 1px; max-width: 1px; margin: 4px 4px; }}
+    QLabel#opBadge {{ color: {t.accent}; border: 1px solid {t.accent}; border-radius: 4px;
+        font-size: 9px; font-weight: bold; padding: 0px 3px; }}
+    QToolButton#infoButton {{ border: none; background: transparent; padding: 0; }}
     QStatusBar {{ background: {t.bg}; color: {t.key}; border-top: 1px solid {t.border}; }}
     QMenuBar {{ background: {t.bg}; color: {t.text}; }}
     QToolTip {{ background: {t.control}; color: {t.text}; border: 1px solid {t.border}; }}
@@ -125,8 +139,18 @@ def stylesheet(t: Theme) -> str:
     """
 
 
+_current = LIGHT
+
+
+def current_theme() -> Theme:
+    """En son uygulanan tema (kendi çizen bileşenler için)."""
+    return _current
+
+
 def apply_theme(app: QApplication, t: Theme) -> None:
     """Temayı tüm uygulamaya uygular (Fusion stili paleti her sistemde aynen kullanır)."""
+    global _current
+    _current = t
     if app.style().name().lower() != "fusion":
         app.setStyle("Fusion")
     app.setPalette(palette(t))

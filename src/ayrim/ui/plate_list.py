@@ -1,17 +1,13 @@
-"""Kalıp listesi: her satırda onay kutusu, renk örneği, ad ve kapsama oranı.
-
-Satırlar gerçek QCheckBox'lardır; QListWidget'ın öğe onay kutuları macOS koyu temada
-düzgün çizilmiyordu.
-"""
+"""Kalıp listesi: her satırda aç/kapa anahtarı, ad, kapsama oranı, üste baskı işareti ve renk örneği."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox,
     QColorDialog,
     QHBoxLayout,
+    QLabel,
     QScrollArea,
     QToolButton,
     QVBoxLayout,
@@ -19,6 +15,17 @@ from PySide6.QtWidgets import (
 )
 
 from ..composite import RGB
+from .widgets import ToggleSwitch
+
+OVERPRINT_HELP = (
+    "<b>Üste baskı (overprint)</b><br>"
+    "Normalde üstteki renk, altında kalan renklerin o alandaki mürekkebini siler (boşaltma, knockout). "
+    "Üste baskı açık bir nesnede alttaki mürekkep silinmez; üstteki renk onun üzerine basılır "
+    "ve iki mürekkep karışır.<br><br>"
+    "Siyah metin ve ince çizgilerde, baskıdaki kayıt kaymasının bıraktığı beyaz boşlukları önlemek "
+    "için bilerek kullanılır. Açık renkli ya da beyaz nesnelerde ise istenmeyen sonuç verebilir: "
+    "renk değişir veya nesne hiç görünmez."
+)
 
 
 def swatch(color: RGB, size: int = 16) -> QIcon:
@@ -36,9 +43,13 @@ class PlateRow(QWidget):
         self.name = name
         lay = QHBoxLayout(self)
         lay.setContentsMargins(6, 2, 6, 2)
-        self.check = QCheckBox(f"{name}   {coverage * 100:.1f}%")
+        self.check = ToggleSwitch(f"{name}   {coverage * 100:.1f}%")
         self.check.setChecked(checked)
         self.check.toggled.connect(self.toggled)
+        self.op_badge = QLabel("OP")
+        self.op_badge.setObjectName("opBadge")
+        self.op_badge.setToolTip(f"Bu sayfada bu kalıba üste baskı ile basılan nesneler var.<br><br>{OVERPRINT_HELP}")
+        self.op_badge.hide()
         self.color_btn = QToolButton()
         self.color_btn.setAutoRaise(True)
         self.color_btn.setIconSize(QSize(18, 18))
@@ -50,6 +61,7 @@ class PlateRow(QWidget):
             else "Rengi PDF'ten okunamadı; seçmek için tıklayın."
         )
         lay.addWidget(self.check, 1)
+        lay.addWidget(self.op_badge)
         lay.addWidget(self.color_btn)
 
     def set_color(self, color: RGB) -> None:
@@ -63,6 +75,7 @@ class PlateList(QScrollArea):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWidgetResizable(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._inner = QWidget()
         self._lay = QVBoxLayout(self._inner)
         self._lay.setContentsMargins(0, 4, 0, 4)
@@ -84,6 +97,12 @@ class PlateList(QScrollArea):
             row.color_clicked.connect(self._pick_color)
             self._lay.insertWidget(len(self.rows), row)
             self.rows.append(row)
+
+    def set_overprint(self, names) -> None:
+        """Üste baskı ile basılan kalıpların yanına OP işareti koyar."""
+        names = set(names)
+        for r in self.rows:
+            r.op_badge.setVisible(r.name in names)
 
     def checked_names(self) -> list[str]:
         return [r.name for r in self.rows if r.check.isChecked()]

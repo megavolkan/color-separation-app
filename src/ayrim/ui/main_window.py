@@ -4,22 +4,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool, QTimer
+from PySide6.QtCore import QSize, Qt, QThreadPool, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QComboBox,
     QDockWidget,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QSizePolicy,
-    QSpinBox,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -28,10 +28,12 @@ from ..composite import PROCESS_RGB, RGB, composite, grayscale, inks_at
 from ..gs import Renderer
 from ..pdfinfo import DocInfo, read_pdf_info
 from ..separations import Separation
+from . import icons
 from .info_panel import InfoPanel
 from .page_view import PageView
 from .plate_list import PlateList
 from .theme import DARK, LIGHT, Theme, apply_theme, save_theme, saved_theme
+from .widgets import ToggleSwitch
 from .worker import DetailsTask, RenderTask
 
 UNKNOWN_SPOT_RGB: RGB = (0.6, 0.6, 0.6)
@@ -92,60 +94,82 @@ class MainWindow(QMainWindow):
     def _build_toolbar(self) -> None:
         tb = QToolBar("Araçlar")
         tb.setMovable(False)
+        tb.setIconSize(QSize(18, 18))
+        tb.setContextMenuPolicy(Qt.ContextMenuPolicy.PreventContextMenu)
         self.addToolBar(tb)
+        self._icon_buttons: list[tuple[QAction, str]] = []  # tema değişince yeniden boyanır
 
-        open_act = QAction("Aç…", self)
-        open_act.setShortcut(QKeySequence.StandardKey.Open)
-        open_act.triggered.connect(self.open_dialog)
-        tb.addAction(open_act)
-        self.close_act = QAction("Kapat", self)
-        self.close_act.setShortcut(QKeySequence.StandardKey.Close)
-        self.close_act.setToolTip("Belgeyi kapat (uygulama açık kalır)")
-        self.close_act.triggered.connect(self.close_pdf)
+        def action(text, slot, shortcut=None, icon=None, tip=None) -> QAction:
+            act = QAction(text, self)
+            if shortcut:
+                act.setShortcut(QKeySequence(shortcut))
+            if slot:
+                act.triggered.connect(slot)
+            if tip:
+                act.setToolTip(tip)
+            if icon:
+                self._icon_buttons.append((act, icon))
+            return act
+
+        def button(act: QAction, text_beside: bool = False, group: str | None = None) -> QToolButton:
+            btn = QToolButton()
+            btn.setDefaultAction(act)
+            btn.setToolButtonStyle(
+                Qt.ToolButtonStyle.ToolButtonTextBesideIcon if text_beside else Qt.ToolButtonStyle.ToolButtonIconOnly
+            )
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            if group:
+                btn.setProperty("group", group)
+            tb.addWidget(btn)
+            return btn
+
+        def joined(*widgets) -> None:
+            # Gruplu düğmeler aralarında boşluk olmadan yan yana durur.
+            box = QWidget()
+            lay = QHBoxLayout(box)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lay.setSpacing(0)
+            for w in widgets:
+                lay.addWidget(w)
+            tb.addWidget(box)
+
+        open_act = action("Aç", self.open_dialog, QKeySequence.StandardKey.Open, "folder", "PDF aç (⌘O)")
+        self.close_act = action(
+            "Kapat", self.close_pdf, QKeySequence.StandardKey.Close, "close", "Belgeyi kapat; uygulama açık kalır (⌘W)"
+        )
         self.close_act.setEnabled(False)
-        tb.addAction(self.close_act)
+        button(open_act, text_beside=True)
+        button(self.close_act, text_beside=True)
+
+        info_act = self.info_dock.toggleViewAction()
+        info_act.setShortcut(QKeySequence("Ctrl+I"))
+        info_act.setToolTip("Belge bilgisi panelini aç/kapat (⌘I)")
+        self._icon_buttons.append((info_act, "document"))
+        button(info_act)
+        self.theme_act = action("Koyu tema", None, "Ctrl+Shift+T")
+        self.theme_act.setCheckable(True)
+        self.theme_act.toggled.connect(lambda dark: self.set_theme(DARK if dark else LIGHT))
+        self.theme_btn = button(self.theme_act)
+        self.theme_btn.setProperty("plain", True)  # işaretli görünmesin; yalnızca simgesi değişir
+
         file_menu = self.menuBar().addMenu("Dosya")
         file_menu.addAction(open_act)
         file_menu.addAction(self.close_act)
-        info_act = self.info_dock.toggleViewAction()
-        info_act.setShortcut(QKeySequence("Ctrl+I"))
         view_menu = self.menuBar().addMenu("Görünüm")
         view_menu.addAction(info_act)
-        tb.addSeparator()
+        view_menu.addAction(self.theme_act)
 
-        self.prev_act = QAction("◀", self)
-        self.prev_act.setShortcut(QKeySequence(Qt.Key.Key_PageUp))
-        self.prev_act.triggered.connect(lambda: self.go_to(self.page - 1))
-        tb.addAction(self.prev_act)
-        self.page_spin = QSpinBox()
-        self.page_spin.setMinimum(1)
-        self.page_spin.valueChanged.connect(self.go_to)
-        tb.addWidget(self.page_spin)
-        self.page_total = QLabel(" / 0 ")
-        tb.addWidget(self.page_total)
-        self.next_act = QAction("▶", self)
-        self.next_act.setShortcut(QKeySequence(Qt.Key.Key_PageDown))
-        self.next_act.triggered.connect(lambda: self.go_to(self.page + 1))
-        tb.addAction(self.next_act)
-        tb.addSeparator()
-
-        fit_act = QAction("Sığdır", self)
-        fit_act.setShortcut(QKeySequence("Ctrl+0"))
-        fit_act.triggered.connect(self.view.fit)
-        tb.addAction(fit_act)
-        tb.addSeparator()
-
-        tb.addWidget(QLabel(" Çözünürlük: "))
+        tb.addWidget(QLabel("Çözünürlük:"))
         self.dpi_combo = QComboBox()
         self.dpi_combo.addItem("Otomatik", None)
         for d in MANUAL_DPIS:
             self.dpi_combo.addItem(f"{d} dpi", d)
         self.dpi_combo.setToolTip("Otomatik: ekrana ve yakınlaştırmaya göre seçilir.")
+        self.dpi_combo.setCursor(Qt.CursorShape.PointingHandCursor)
         self.dpi_combo.currentIndexChanged.connect(self._on_dpi_mode)
         tb.addWidget(self.dpi_combo)
-        tb.addSeparator()
 
-        self.gray_box = QCheckBox("Tek kalıbı gri göster")
+        self.gray_box = ToggleSwitch("Tek kalıbı gri göster")
         self.gray_box.setToolTip("Yalnızca bir kalıp seçiliyken o kalıbı gri tonlu gösterir.")
         self.gray_box.toggled.connect(self.refresh_preview)
         tb.addWidget(self.gray_box)
@@ -153,13 +177,50 @@ class MainWindow(QMainWindow):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         tb.addWidget(spacer)
-        self.theme_act = QAction("Koyu tema", self)
-        self.theme_act.setCheckable(True)
-        self.theme_act.setShortcut(QKeySequence("Ctrl+Shift+T"))
-        self.theme_act.toggled.connect(lambda dark: self.set_theme(DARK if dark else LIGHT))
-        tb.addAction(self.theme_act)
+
+        self.prev_act = action("Önceki sayfa", lambda: self.go_to(self.page - 1), Qt.Key.Key_PageUp, "minus",
+                               "Önceki sayfa (PageUp)")
+        self.next_act = action("Sonraki sayfa", lambda: self.go_to(self.page + 1), Qt.Key.Key_PageDown, "plus",
+                               "Sonraki sayfa (PageDown)")
+        prev_btn = QToolButton()
+        prev_btn.setDefaultAction(self.prev_act)
+        prev_btn.setProperty("group", "left")
+        self.page_label = QLabel("0 / 0")
+        self.page_label.setObjectName("pageLabel")
+        self.page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        next_btn = QToolButton()
+        next_btn.setDefaultAction(self.next_act)
+        next_btn.setProperty("group", "right")
+        joined(prev_btn, self.page_label, next_btn)
+
+        line = QFrame()
+        line.setObjectName("toolbarLine")
+        tb.addWidget(line)
+
+        zoom_out = action("Uzaklaştır", lambda: self.view.zoom(1 / 1.25), QKeySequence.StandardKey.ZoomOut,
+                          "zoom-out", "Uzaklaştır (⌘−)")
+        zoom_in = action("Yakınlaştır", lambda: self.view.zoom(1.25), QKeySequence.StandardKey.ZoomIn,
+                         "zoom-in", "Yakınlaştır (⌘+)")
+        out_btn, in_btn = QToolButton(), QToolButton()
+        out_btn.setDefaultAction(zoom_out)
+        out_btn.setProperty("group", "left")
+        in_btn.setDefaultAction(zoom_in)
+        in_btn.setProperty("group", "right")
+        joined(out_btn, in_btn)
+        fit_act = action("Sığdır", self.view.fit, "Ctrl+0", "fit", "Sayfayı pencereye sığdır (⌘0)")
+        button(fit_act)
         view_menu.addSeparator()
-        view_menu.addAction(self.theme_act)
+        for act in (zoom_in, zoom_out, fit_act):
+            view_menu.addAction(act)
+        for btn in tb.findChildren(QToolButton):
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def _refresh_icons(self) -> None:
+        t = self.theme
+        for act, name in self._icon_buttons:
+            act.setIcon(icons.icon(name, t.text, t.key))
+        self.theme_act.setIcon(icons.icon("sun" if t.is_dark else "moon", t.text, t.key))
+        self.theme_act.setToolTip("Açık temaya geç (⌘⇧T)" if t.is_dark else "Koyu temaya geç (⌘⇧T)")
 
     def set_theme(self, theme: Theme, save: bool = True) -> None:
         """Açık/koyu temayı tüm uygulamaya uygular."""
@@ -172,8 +233,8 @@ class MainWindow(QMainWindow):
         self.theme_act.blockSignals(True)
         self.theme_act.setChecked(theme.is_dark)
         self.theme_act.blockSignals(False)
-        self.theme_act.setIconText("☀ Açık" if theme.is_dark else "☾ Koyu")
-        self.theme_act.setToolTip("Açık temaya geç" if theme.is_dark else "Koyu temaya geç")
+        self._refresh_icons()
+        self.plates.update()
         if save:
             save_theme(theme)
 
@@ -196,7 +257,7 @@ class MainWindow(QMainWindow):
         row.addWidget(none_btn)
         lay.addLayout(row)
         dock.setWidget(w)
-        dock.setMinimumWidth(240)
+        dock.setMinimumWidth(280)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
 
     def _build_readout_dock(self) -> None:
@@ -280,6 +341,7 @@ class MainWindow(QMainWindow):
     def _on_details(self, doc_id: int, details) -> None:
         if doc_id == self._doc_id:
             self.info_panel.set_details(details, self.page)
+            self._update_overprint()
 
     def _on_details_failed(self, doc_id: int, msg: str) -> None:
         if doc_id == self._doc_id:
@@ -388,17 +450,18 @@ class MainWindow(QMainWindow):
                 color, known = self.plate_color(s.name)
                 plates.append((s.name, color, s.coverage(), known))
             self.plates.set_plates(plates, self.checked)
+        self._update_overprint()
         self.dpi_label.setText(f"{dpi} dpi")
         self.refresh_preview()
 
+    def _update_overprint(self) -> None:
+        d = self.info_panel.details
+        ok = d is not None and 1 <= self.page <= len(d.pages)
+        self.plates.set_overprint(d.pages[self.page - 1].overprint if ok else ())
+
     def _update_nav(self) -> None:
         n = self.info.page_count if self.info else 0
-        self.page_spin.blockSignals(True)
-        self.page_spin.setMaximum(max(n, 1))
-        self.page_spin.setValue(max(self.page, 1))
-        self.page_spin.blockSignals(False)
-        self.page_spin.setEnabled(n > 1)
-        self.page_total.setText(f" / {n} ")
+        self.page_label.setText(f"{self.page if n else 0} / {n}")
         self.prev_act.setEnabled(self.page > 1)
         self.next_act.setEnabled(self.page < n)
 

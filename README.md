@@ -53,21 +53,22 @@ Linux (Arch/CachyOS): `sudo pacman -S ghostscript uv`, sonra aynı komutlar.
 ## Kullanım
 
 - **Dosya > Aç…** (⌘O) ya da PDF'i pencereye sürükleyin.
-- Sağdaki listede kalıpları açıp kapatın; kalıp adının yanında sayfadaki ortalama
-  kapsama oranı yazar. Satırın sağındaki renk kutusuna tıklayarak kalıbın ekran rengini değiştirebilirsiniz
+- Sağdaki listede kalıpları anahtarlarla açıp kapatın; kalıp adının yanında sayfadaki ortalama
+  kapsama oranı yazar. O sayfada üste baskı (overprint) ile basılan kalıpların yanında **OP** işareti çıkar. Satırın sağındaki renk kutusuna tıklayarak kalıbın ekran rengini değiştirebilirsiniz
   (rengi PDF'ten okunamayan spotlar için).
 - Tek kalıp seçiliyken **Tek kalıbı gri göster** ile kalıp gri tonlu görünür.
 - İmleci sayfada gezdirin: alttaki panel her kalıbın yüzdesini ve toplam mürekkebi (TAC) gösterir.
-- ◀ ▶ (PageUp/PageDown) ile sayfalar arasında gezinin. Trackpad'de kıstırarak ya da ⌘ + tekerlekle
-  yakınlaştırın, **Sığdır** (⌘0) geri alır.
+- Sağ üstteki **− 1 / 3 +** düğmeleriyle (PageUp/PageDown) sayfalar arasında gezinin. Büyüteç düğmeleri,
+  trackpad'de kıstırma ya da ⌘ + tekerlek yakınlaştırır; çerçeve düğmesi (⌘0) sayfayı pencereye sığdırır.
 - **Çözünürlük: Otomatik** sayfayı ekranın (Retina dahil) gerektirdiği çözünürlükte işler;
   yakınlaştırınca daha yüksek DPI ile yeniden işler. İsterseniz sabit 72/150/300/600 dpi seçin.
 - Soldaki **Belge bilgisi** paneli (⌘I ile açılıp kapanır) PDF sürümünü ve PDF/X uyumluluğunu,
   çıktı amacını ve gömülü ICC profillerini, kullanılan renk uzaylarını, o sayfanın kutularını
   (Media/Trim/Bleed…, mm cinsinden) ve taşma payını, yazı tiplerinin gömülü olup olmadığını gösterir.
-  RGB nesneler ve gömülmemiş yazı tipleri turuncu ile işaretlenir.
+  RGB nesneler ve gömülmemiş yazı tipleri vurgu rengiyle işaretlenir. **Üste baskı** satırı üste baskı ile
+  basılan kalıpları listeler; yanındaki (i) üzerine gelince üste baskının ne olduğu anlatılır.
 - **Dosya > Kapat** (⌘W) belgeyi kapatır, uygulama açık kalır.
-- Araç çubuğunun sağındaki **☾ Koyu / ☀ Açık** düğmesi (⌘⇧T) açık ve koyu tema arasında geçer;
+- Araç çubuğundaki ay / güneş düğmesi (⌘⇧T) açık ve koyu tema arasında geçer;
   seçim hatırlanır. İlk açılışta sistemin teması kullanılır.
 
 İşlenen sayfalar `~/Library/Caches/ayrim` altında saklanır; aynı dosya ve ayarla

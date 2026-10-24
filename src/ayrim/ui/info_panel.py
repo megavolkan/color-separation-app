@@ -9,10 +9,12 @@ from html import escape
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextDocumentFragment
-from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from ..docdetails import DocDetails, IccProfile, bleed_mm, box_size_mm
+from .plate_list import OVERPRINT_HELP
 from .theme import LIGHT, Theme
+from .widgets import InfoButton
 
 PADDING = 10
 BOX_LABELS = {
@@ -23,6 +25,7 @@ BOX_LABELS = {
     "ArtBox": "Sanat (ArtBox)",
 }
 RGB_SPACES = {"RGB", "ICC RGB"}
+OVERPRINT_KEY = "Üste baskı"
 
 Rows = list[tuple[str, str]]  # (anahtar, değer HTML'i)
 
@@ -56,6 +59,7 @@ def sections(d: DocDetails, page: int, t: Theme) -> list[tuple[str, Rows | str]]
         last = max(i for i, s in enumerate(d.color_spaces) if s in RGB_SPACES)
         lines[last] += " " + accent("RGB nesneler baskıda CMYK’ya dönüştürülür.", small=True)
     color.append(("Renk uzayları", "<br>".join(lines) or "—"))
+    color.append((OVERPRINT_KEY, "<br>".join(escape(n) for n in d.overprint) or "Yok"))
 
     out: list[tuple[str, Rows | str]] = [("PDF", pdf), ("Renk", color)]
     if 1 <= page <= len(d.pages):
@@ -166,7 +170,17 @@ class InfoPanel(QScrollArea):
         grid.setVerticalSpacing(4)
         grid.setColumnStretch(1, 1)
         for r, (key, value) in enumerate(rows):
-            grid.addWidget(_label(key + ":", "key"), r, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+            key_cell = _label(key + ":", "key")
+            if key == OVERPRINT_KEY:
+                # Anahtarın soluna, üzerine gelince ne olduğunu anlatan (i) düğmesi.
+                key_cell = QWidget()
+                kl = QHBoxLayout(key_cell)
+                kl.setContentsMargins(0, 0, 0, 0)
+                kl.setSpacing(4)
+                kl.addWidget(InfoButton(OVERPRINT_HELP + "<br><br>Kalıp listesinde bu kalıpların yanında "
+                                        "<b>OP</b> işareti görünür."))
+                kl.addWidget(_label(key + ":", "key"))
+            grid.addWidget(key_cell, r, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
             v = _label(value, "value")
             v.setWordWrap(True)
             grid.addWidget(v, r, 1, Qt.AlignmentFlag.AlignTop)

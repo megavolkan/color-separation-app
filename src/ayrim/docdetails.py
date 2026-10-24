@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import re
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pikepdf
 
+from .overprint import ink_order, overprinted_inks
 from .pdfinfo import name_str
 from .separations import PROCESS_NAMES
 
@@ -51,6 +52,7 @@ class PageBoxes:
     number: int
     boxes: dict[str, tuple[float, float, float, float]]  # yalnızca PDF'te tanımlı olanlar, pt
     rotate: int = 0
+    overprint: tuple[str, ...] = ()  # üste baskı ile boyanan kalıplar
 
 
 @dataclass
@@ -63,6 +65,11 @@ class DocDetails:
     icc_profiles: list[IccProfile] = field(default_factory=list)
     fonts: list[FontInfo] = field(default_factory=list)
     pages: list[PageBoxes] = field(default_factory=list)
+
+    @property
+    def overprint(self) -> list[str]:
+        """Belgenin herhangi bir sayfasında üste baskı ile boyanan kalıplar."""
+        return ink_order({n for p in self.pages for n in p.overprint})
 
 
 # ---------------------------------------------------------------- ICC
@@ -305,7 +312,12 @@ def read_doc_details(path: Path | str) -> DocDetails:
         details = DocDetails(str(pdf.pdf_version), pdfx, pdfa, _output_intents(pdf))
         col = _Collector()
         for i, page in enumerate(pdf.pages, start=1):
-            details.pages.append(_page_boxes(i, page))
+            pb = _page_boxes(i, page)
+            try:
+                pb = replace(pb, overprint=tuple(ink_order(overprinted_inks(page))))
+            except Exception:
+                pass  # okunamayan içerik: üste baskı bilgisi gösterilmez
+            details.pages.append(pb)
             col.content(page, page.resources)
         rank = {s: i for i, s in enumerate(COLOR_SPACE_ORDER)}
         details.color_spaces = sorted(col.spaces, key=lambda s: (rank.get(s, len(rank)), s))
