@@ -134,3 +134,11 @@ def test_toolbar_toggles_and_overprint_badge(app, renderer, fixtures_dir):
     assert badges["PANTONE 185 C"] and not badges["Black"]
     assert "Üste baskı:" in win.info_panel.text().splitlines()
     win.close()
+
+
+def test_about_shows_license_and_ghostscript(app, renderer):
+    from ayrim.ui.about import SOURCE_URL, about_html
+
+    html = about_html(renderer.gs)
+    assert "Affero" in html and SOURCE_URL in html and renderer.gs.version in html
+    assert "Ghostscript bulunamadı" in about_html(None)

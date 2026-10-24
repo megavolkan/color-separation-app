@@ -90,3 +90,14 @@ Ghostscript ile doğrulanan davranışlar (10.02, `src/ayrim/separations.py`):
   olarak yazılır (`/` → `%2F`, `%` → `%25`, `:` → `%3A`).
 - `-dSimulateOverprint` artık desteklenmiyor; `-sOverprint=simulate|disable` kullanılıyor.
 - Yalnızca sayfada kullanılan spotlar için dosya üretilir; CMYK her zaman üretilir.
+
+## Lisans
+
+Ayrım, [GNU Affero Genel Kamu Lisansı 3.0 veya sonrası](LICENSE) (AGPL-3.0-or-later) ile
+lisanslanmış özgür yazılımdır. Hiçbir garanti verilmez.
+
+Renk ayrımları [Ghostscript](https://ghostscript.com) ile üretilir. Ghostscript,
+Artifex Software, Inc. tarafından geliştirilen ve AGPL-3.0 ile lisanslanan ayrı bir
+programdır; Ayrım onu bilgisayarda kurulu `gs` komutu olarak çalıştırır ve Artifex ile
+ilişkili değildir. Paketlerde bulunan diğer bileşenlerin lisansları
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) dosyasındadır.

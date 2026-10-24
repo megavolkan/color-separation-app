@@ -29,6 +29,7 @@ from ..gs import Renderer
 from ..pdfinfo import DocInfo, read_pdf_info
 from ..separations import Separation
 from . import icons
+from .about import about_html
 from .info_panel import InfoPanel
 from .page_view import PageView
 from .plate_list import PlateList
@@ -158,6 +159,10 @@ class MainWindow(QMainWindow):
         view_menu = self.menuBar().addMenu("Görünüm")
         view_menu.addAction(info_act)
         view_menu.addAction(self.theme_act)
+        about_act = QAction("Ayrım Hakkında", self)
+        about_act.setMenuRole(QAction.MenuRole.AboutRole)  # macOS'ta uygulama menüsüne taşınır
+        about_act.triggered.connect(self.show_about)
+        self.menuBar().addMenu("Yardım").addAction(about_act)
 
         tb.addWidget(QLabel("Çözünürlük:"))
         self.dpi_combo = QComboBox()
@@ -214,6 +219,9 @@ class MainWindow(QMainWindow):
             view_menu.addAction(act)
         for btn in tb.findChildren(QToolButton):
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def show_about(self) -> None:
+        QMessageBox.about(self, "Ayrım Hakkında", about_html(getattr(self.renderer, "gs", None)))
 
     def _refresh_icons(self) -> None:
         t = self.theme

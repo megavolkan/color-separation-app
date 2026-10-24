@@ -22,7 +22,11 @@ a = Analysis(
     [os.path.join(SPECPATH, "run_ayrim.py")],
     pathex=[os.path.join(ROOT, "src")],
     excludes=EXCLUDES,
-    datas=copy_metadata("ayrim"),  # uygulama içinde ayrim.__version__ için
+    # Sürüm bilgisi (ayrim.__version__) ve paketle birlikte dağıtılması gereken lisans metinleri.
+    datas=copy_metadata("ayrim") + [
+        (os.path.join(ROOT, "LICENSE"), "."),
+        (os.path.join(ROOT, "THIRD_PARTY_LICENSES.md"), "."),
+    ],
 )
 pyz = PYZ(a.pure)
 exe = EXE(
