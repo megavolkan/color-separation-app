@@ -57,3 +57,28 @@ def test_plain_fixture(fixtures_dir):
     assert d.pdfx is None and not d.output_intents and not d.fonts
     assert d.color_spaces == ["CMYK", "Spot"]
     assert len(d.pages) == 3 and bleed_mm(d.pages[0]) is None
+
+
+def test_blend_space_and_page_ranges(tmp_path, fixtures_dir):
+    import pikepdf
+
+    from ayrim.docdetails import page_ranges
+    from ayrim.ui.info_panel import sections
+    from ayrim.ui.theme import LIGHT
+
+    # Affinity çıktısı gibi: 1. sayfa CMYK, diğerleri ICC RGB karışım uzaylı saydamlık grubu
+    src = pikepdf.open(fixtures_dir / "multipage.pdf")
+    rgb = src.make_stream(profile("default_rgb.icc"), N=3)
+    groups = [pikepdf.Name.DeviceCMYK, pikepdf.Array([pikepdf.Name.ICCBased, rgb]), pikepdf.Array([pikepdf.Name.ICCBased, rgb])]
+    for page, cs in zip(src.pages, groups):
+        page.obj.Group = pikepdf.Dictionary(S=pikepdf.Name.Transparency, CS=cs)
+    pdf = tmp_path / "blend.pdf"
+    src.save(pdf)
+
+    d = read_doc_details(pdf)
+    assert [p.blend_space for p in d.pages] == ["CMYK", "RGB", "RGB"]
+    assert d.rgb_blend_pages == [2, 3]
+    rows = dict(sections(d, 1, LIGHT)[1][1])
+    assert "CMYK (sayfa 1)" in rows["Karışım uzayı"] and "RGB (sayfa 2–3)" in rows["Karışım uzayı"]
+    assert read_doc_details(fixtures_dir / "basic.pdf").pages[0].blend_space is None
+    assert page_ranges([2, 3, 4, 7, 9, 10]) == "2–4, 7, 9–10"

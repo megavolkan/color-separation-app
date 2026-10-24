@@ -9,9 +9,18 @@ from html import escape
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextDocumentFragment
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
-from ..docdetails import DocDetails, IccProfile, bleed_mm, box_size_mm
+from ..docdetails import DocDetails, IccProfile, bleed_mm, box_size_mm, page_ranges
 from .plate_list import OVERPRINT_HELP
 from .theme import LIGHT, Theme
 from .widgets import InfoButton
@@ -26,6 +35,19 @@ BOX_LABELS = {
 }
 RGB_SPACES = {"RGB", "ICC RGB"}
 OVERPRINT_KEY = "Üste baskı"
+BLEND_KEY = "Karışım uzayı"
+BLEND_HELP = (
+    "<b>Saydamlık karışım renk uzayı</b><br>"
+    "PDF sayfasındaki saydamlık ve üste baskı etkileri, sayfa grubunun renk uzayında hesaplanır. "
+    "Bu uzay CMYK ise mürekkepler ayrı ayrı korunur ve üste baskı doğru sonuç verir.<br><br>"
+    "RGB ise karışım RGB'de yapılır: üste baskılı spot rengin altındaki CMYK mürekkepleri silinebilir "
+    "(boşaltma) ve renkler RGB'ye gidip gelirken değişebilir. Bu sayfalarda önizleme ile baskı farklı olabilir.<br><br>"
+    "Çözüm: tasarım programında belge renk biçimini CMYK seçip CMYK çıktıyla (örn. PDF/X-4) dışa aktarın."
+)
+INFO_KEYS = {
+    OVERPRINT_KEY: OVERPRINT_HELP + "<br><br>Kalıp listesinde bu kalıpların yanında <b>OP</b> işareti görünür.",
+    BLEND_KEY: BLEND_HELP,
+}
 
 Rows = list[tuple[str, str]]  # (anahtar, değer HTML'i)
 
@@ -60,6 +82,20 @@ def sections(d: DocDetails, page: int, t: Theme) -> list[tuple[str, Rows | str]]
         lines[last] += " " + accent("RGB nesneler baskıda CMYK’ya dönüştürülür.", small=True)
     color.append(("Renk uzayları", "<br>".join(lines) or "—"))
     color.append((OVERPRINT_KEY, "<br>".join(escape(n) for n in d.overprint) or "Yok"))
+    spaces_used = sorted({p.blend_space for p in d.pages if p.blend_space})
+    if spaces_used:
+        rgb = d.rgb_blend_pages
+        if rgb:
+            where = "tüm sayfalar" if len(rgb) == len(d.pages) else f"sayfa {page_ranges(rgb)}"
+            value = accent(f"RGB ({where})") + " " + accent(
+                "Üste baskı ve saydamlık bu sayfalarda CMYK'daki gibi görünmeyebilir.", small=True)
+            others = [s for s in spaces_used if s != "RGB"]
+            if others:
+                rest = [p.number for p in d.pages if p.blend_space and p.blend_space != "RGB"]
+                value = f"{'/'.join(others)} (sayfa {page_ranges(rest)})<br>" + value
+        else:
+            value = ", ".join(spaces_used)
+        color.append((BLEND_KEY, value))
 
     out: list[tuple[str, Rows | str]] = [("PDF", pdf), ("Renk", color)]
     if 1 <= page <= len(d.pages):
@@ -171,18 +207,20 @@ class InfoPanel(QScrollArea):
         grid.setColumnStretch(1, 1)
         for r, (key, value) in enumerate(rows):
             key_cell = _label(key + ":", "key")
-            if key == OVERPRINT_KEY:
+            if key in INFO_KEYS:
                 # Anahtarın soluna, üzerine gelince ne olduğunu anlatan (i) düğmesi.
                 key_cell = QWidget()
                 kl = QHBoxLayout(key_cell)
                 kl.setContentsMargins(0, 0, 0, 0)
                 kl.setSpacing(4)
-                kl.addWidget(InfoButton(OVERPRINT_HELP + "<br><br>Kalıp listesinde bu kalıpların yanında "
-                                        "<b>OP</b> işareti görünür."))
+                kl.addWidget(InfoButton(INFO_KEYS[key]))
                 kl.addWidget(_label(key + ":", "key"))
             grid.addWidget(key_cell, r, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
             v = _label(value, "value")
             v.setWordWrap(True)
+            # Uzun değerler panel genişliğinde satıra bölünsün, paneli genişletip taşmasın.
+            v.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            v.setMinimumWidth(1)
             grid.addWidget(v, r, 1, Qt.AlignmentFlag.AlignTop)
         lay.addLayout(grid)
         return box

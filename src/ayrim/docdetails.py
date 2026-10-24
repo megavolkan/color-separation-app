@@ -53,6 +53,7 @@ class PageBoxes:
     boxes: dict[str, tuple[float, float, float, float]]  # yalnızca PDF'te tanımlı olanlar, pt
     rotate: int = 0
     overprint: tuple[str, ...] = ()  # üste baskı ile boyanan kalıplar
+    blend_space: str | None = None  # sayfa saydamlık grubunun karışım uzayı: CMYK, RGB, Gri
 
 
 @dataclass
@@ -65,6 +66,11 @@ class DocDetails:
     icc_profiles: list[IccProfile] = field(default_factory=list)
     fonts: list[FontInfo] = field(default_factory=list)
     pages: list[PageBoxes] = field(default_factory=list)
+
+    @property
+    def rgb_blend_pages(self) -> list[int]:
+        """Saydamlık karışımı RGB'de yapılan sayfalar (üste baskı simülasyonu bu sayfalarda kaybolur)."""
+        return [p.number for p in self.pages if p.blend_space == "RGB"]
 
     @property
     def overprint(self) -> list[str]:
@@ -264,7 +270,35 @@ def _page_boxes(number: int, page: pikepdf.Page) -> PageBoxes:
         b = _box(page.obj, name)
         if b:
             boxes[name] = b
-    return PageBoxes(number, boxes, int(page.obj.get("/Rotate", 0)) % 360)
+    return PageBoxes(number, boxes, int(page.obj.get("/Rotate", 0)) % 360, blend_space=_blend_space(page))
+
+
+def _blend_space(page: pikepdf.Page) -> str | None:
+    """Sayfa saydamlık grubunun (/Group /S /Transparency) karışım renk uzayı."""
+    group = page.obj.get("/Group")
+    if not isinstance(group, pikepdf.Dictionary) or str(group.get("/S", "")) != "/Transparency":
+        return None
+    cs = group.get("/CS")
+    if isinstance(cs, pikepdf.Name):
+        return {"/DeviceCMYK": "CMYK", "/DeviceRGB": "RGB", "/DeviceGray": "Gri"}.get(str(cs))
+    if isinstance(cs, pikepdf.Array) and len(cs) > 1 and name_str(cs[0]) == "ICCBased":
+        return {1: "Gri", 3: "RGB", 4: "CMYK"}.get(int(cs[1].get("/N", 0)))
+    if isinstance(cs, pikepdf.Array) and len(cs) and name_str(cs[0]) == "CalRGB":
+        return "RGB"
+    return None
+
+
+def page_ranges(numbers: list[int]) -> str:
+    """[2, 3, 4, 7] → "2–4, 7"."""
+    out, start, prev = [], None, None
+    for n in sorted(numbers) + [None]:
+        if start is not None and (n is None or n != prev + 1):
+            out.append(str(start) if start == prev else f"{start}–{prev}")
+            start = None
+        if n is not None and start is None:
+            start = n
+        prev = n
+    return ", ".join(out)
 
 
 def _conformance(pdf: pikepdf.Pdf) -> tuple[str | None, str | None]:

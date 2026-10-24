@@ -68,6 +68,8 @@ Linux (Arch/CachyOS): `sudo pacman -S ghostscript uv`, sonra aynı komutlar.
   (Media/Trim/Bleed…, mm cinsinden) ve taşma payını, yazı tiplerinin gömülü olup olmadığını gösterir.
   RGB nesneler ve gömülmemiş yazı tipleri vurgu rengiyle işaretlenir. **Üste baskı** satırı üste baskı ile
   basılan kalıpları listeler; yanındaki (i) üzerine gelince üste baskının ne olduğu anlatılır.
+  **Karışım uzayı** satırı, saydamlık karışımı RGB'de yapılan sayfaları uyarır; bu sayfalarda üste baskı ve
+  saydamlık CMYK'daki gibi görünmeyebilir (örn. üste baskılı spot rengin altındaki CMYK silinir).
 - **Dosya > Kapat** (⌘W) belgeyi kapatır, uygulama açık kalır.
 - Araç çubuğundaki ay / güneş düğmesi (⌘⇧T) açık ve koyu tema arasında geçer;
   seçim hatırlanır. İlk açılışta sistemin teması kullanılır.
