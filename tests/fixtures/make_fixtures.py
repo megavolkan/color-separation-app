@@ -51,7 +51,7 @@ class PdfWriter:
         raw = data.encode("latin-1")
         return self.add(f"<< /Length {len(raw)} >>\nstream\n".encode() + raw + b"\nendstream")
 
-    def write(self, path: Path, root: int) -> None:
+    def write(self, path: Path, root: int, info: int | None = None) -> None:
         out = bytearray(b"%PDF-1.6\n%\xe2\xe3\xcf\xd3\n")
         offsets = []
         for i, body in enumerate(self.objects, start=1):
@@ -62,7 +62,9 @@ class PdfWriter:
         for off in offsets:
             out += f"{off:010d} 00000 n \n".encode()
         out += (
-            f"trailer\n<< /Size {len(self.objects) + 1} /Root {root} 0 R >>\n"
+            f"trailer\n<< /Size {len(self.objects) + 1} /Root {root} 0 R"
+            + (f" /Info {info} 0 R" if info else "")
+            + " >>\n"
             f"startxref\n{xref}\n%%EOF\n"
         ).encode()
         path.write_bytes(bytes(out))
@@ -226,3 +228,37 @@ def special_names_pdf(path: Path) -> None:
         SPOTS.setdefault(name, (0.1, 0.2, 0.3, 0.0))
     c = "".join(f"/CS{i} cs 1 scn\n" + rect(20 + 90 * i, 20) for i in range(len(SPECIAL_SPOTS)))
     build(path, [{"content": c, "spots": SPECIAL_SPOTS}])
+
+
+def details_pdf(path: Path, cmyk_profile: bytes, rgb_profile: bytes) -> None:
+    """Belge bilgisi testi: PDF/X çıktı amacı, kesim/taşma kutuları, ICC RGB ve iki yazı tipi."""
+    w = PdfWriter()
+    pages = w.reserve()
+    dest = w.add(f"<< /N 4 /Length {len(cmyk_profile)} >>\nstream\n".encode() + cmyk_profile + b"\nendstream")
+    rgb = w.add(f"<< /N 3 /Length {len(rgb_profile)} >>\nstream\n".encode() + rgb_profile + b"\nendstream")
+    cs = w.add(f"[/ICCBased {rgb} 0 R]")
+    ff = w.stream("sahte font verisi")
+    desc = w.add(
+        f"<< /Type /FontDescriptor /FontName /ABCDEF+Gelecek /Flags 32 /FontBBox [0 0 1000 1000] "
+        f"/ItalicAngle 0 /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 /FontFile2 {ff} 0 R >>"
+    )
+    embedded = w.add(f"<< /Type /Font /Subtype /TrueType /BaseFont /ABCDEF+Gelecek /FontDescriptor {desc} 0 R >>")
+    helv = w.add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    content = w.stream(
+        "0 0 0 1 k 10 10 50 50 re f\n/CS0 cs 1 0 0 scn 70 10 50 50 re f\n"
+        "BT /F1 12 Tf 10 100 Td (a) Tj /F2 12 Tf (b) Tj ET\n"
+    )
+    page = w.add(
+        f"<< /Type /Page /Parent {pages} 0 R /MediaBox [0 0 {PAGE} {PAGE}] "
+        f"/BleedBox [6.5 6.5 293.5 293.5] /TrimBox [15 15 285 285] "
+        f"/Resources << /ColorSpace << /CS0 {cs} 0 R >> /Font << /F1 {embedded} 0 R /F2 {helv} 0 R >> >> "
+        f"/Contents {content} 0 R >>"
+    )
+    w.set(pages, f"<< /Type /Pages /Kids [{page} 0 R] /Count 1 >>")
+    intent = (
+        f"<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (FOGRA39) "
+        f"/DestOutputProfile {dest} 0 R >>"
+    )
+    root = w.add(f"<< /Type /Catalog /Pages {pages} 0 R /OutputIntents [{w.add(intent)} 0 R] >>")
+    info = w.add("<< /GTS_PDFXVersion (PDF/X-4) >>")
+    w.write(path, root, info)

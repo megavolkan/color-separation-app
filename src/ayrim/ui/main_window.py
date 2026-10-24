@@ -1,4 +1,4 @@
-"""Ana pencere: PDF açma, sayfa gezinme, kalıp listesi, önizleme ve ölçüm paneli."""
+"""Ana pencere: PDF açma/kapatma, sayfa gezinme, kalıp listesi, önizleme, ölçüm ve belge bilgisi."""
 
 from __future__ import annotations
 
@@ -26,9 +26,10 @@ from ..composite import PROCESS_RGB, RGB, composite, grayscale, inks_at
 from ..gs import Renderer
 from ..pdfinfo import DocInfo, read_pdf_info
 from ..separations import Separation
+from .info_panel import InfoPanel
 from .page_view import PageView
 from .plate_list import PlateList
-from .worker import RenderTask
+from .worker import DetailsTask, RenderTask
 
 UNKNOWN_SPOT_RGB: RGB = (0.6, 0.6, 0.6)
 MAX_CACHED_RENDERS = 8
@@ -55,6 +56,8 @@ class MainWindow(QMainWindow):
         self.checked: dict[str, bool] = {}
         self.color_overrides: dict[str, RGB] = {}
         self._request = 0
+        self._doc_floor = 0  # bu numaraya kadarki istekler kapatılmış/önceki belgeye ait
+        self._doc_id = 0
 
         self.setWindowTitle("Ayrım")
         self.resize(1200, 800)
@@ -75,6 +78,7 @@ class MainWindow(QMainWindow):
 
         self._build_plate_dock()
         self._build_readout_dock()
+        self._build_info_dock()
         self._build_toolbar()
         self.statusBar().showMessage(f"Ghostscript {renderer.gs.version} — {renderer.gs.path}")
         self._update_nav()
@@ -90,7 +94,18 @@ class MainWindow(QMainWindow):
         open_act.setShortcut(QKeySequence.StandardKey.Open)
         open_act.triggered.connect(self.open_dialog)
         tb.addAction(open_act)
-        self.menuBar().addMenu("Dosya").addAction(open_act)
+        self.close_act = QAction("Kapat", self)
+        self.close_act.setShortcut(QKeySequence.StandardKey.Close)
+        self.close_act.setToolTip("Belgeyi kapat (uygulama açık kalır)")
+        self.close_act.triggered.connect(self.close_pdf)
+        self.close_act.setEnabled(False)
+        tb.addAction(self.close_act)
+        file_menu = self.menuBar().addMenu("Dosya")
+        file_menu.addAction(open_act)
+        file_menu.addAction(self.close_act)
+        info_act = self.info_dock.toggleViewAction()
+        info_act.setShortcut(QKeySequence("Ctrl+I"))
+        self.menuBar().addMenu("Görünüm").addAction(info_act)
         tb.addSeparator()
 
         self.prev_act = QAction("◀", self)
@@ -162,6 +177,14 @@ class MainWindow(QMainWindow):
         dock.setWidget(self.readout)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock)
 
+    def _build_info_dock(self) -> None:
+        self.info_dock = QDockWidget("Belge bilgisi", self)
+        self.info_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable)
+        self.info_panel = InfoPanel()
+        self.info_dock.setWidget(self.info_panel)
+        self.info_dock.setMinimumWidth(260)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.info_dock)
+
     # ------------------------------------------------------------ dosya açma
 
     def open_dialog(self) -> None:
@@ -178,9 +201,14 @@ class MainWindow(QMainWindow):
         if info.page_count == 0:
             QMessageBox.warning(self, "Boş belge", "Belgede sayfa yok.")
             return
+        self._reset_document()
         self.pdf, self.info = path, info
-        self.render_cache.clear()
-        self.pending.clear()
+        self.close_act.setEnabled(True)
+        self.info_panel.show_message("Belge bilgisi okunuyor…")
+        task = DetailsTask(path, self._doc_id)
+        task.signals.finished.connect(self._on_details)
+        task.signals.failed.connect(self._on_details_failed)
+        self.pool.start(task)
         self.view.fit()
         self.checked.clear()
         self.color_overrides.clear()
@@ -188,6 +216,42 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"Ayrım — {path.name}")
         self.page = 0
         self.go_to(1)
+
+    def close_pdf(self) -> None:
+        """Belgeyi kapatır; pencere boş haline döner."""
+        if self.pdf is None:
+            return
+        self._reset_document()
+        self.pdf, self.info = None, None
+        self.page = 1
+        self.seps, self.shown_dpi = [], 0
+        self.checked.clear()
+        self.color_overrides.clear()
+        self.plates.set_plates([], {})
+        self.view.clear()
+        self.readout.setText("")
+        self.dpi_label.setText("")
+        self.info_panel.show_message("Belge açılmadı.")
+        self.close_act.setEnabled(False)
+        self.setWindowTitle("Ayrım")
+        self._update_nav()
+
+    def _reset_document(self) -> None:
+        """Önceki belgeden gelecek geç sonuçları yok say."""
+        self._doc_floor = self._request
+        self._doc_id += 1
+        self.render_cache.clear()
+        self.pending.clear()
+        self.view.unsetCursor()
+        self.statusBar().clearMessage()
+
+    def _on_details(self, doc_id: int, details) -> None:
+        if doc_id == self._doc_id:
+            self.info_panel.set_details(details, self.page)
+
+    def _on_details_failed(self, doc_id: int, msg: str) -> None:
+        if doc_id == self._doc_id:
+            self.info_panel.show_message(f"Belge bilgisi okunamadı: {msg}")
 
     def dragEnterEvent(self, event) -> None:
         if any(u.toLocalFile().lower().endswith(".pdf") for u in event.mimeData().urls()):
@@ -207,6 +271,7 @@ class MainWindow(QMainWindow):
             return
         self.page = page
         self._update_nav()
+        self.info_panel.set_page(page)
         info = self.info.pages[page - 1]
         self.view.set_page(info.width_pt, info.height_pt)
         self.seps, self.shown_dpi = [], 0
@@ -256,6 +321,8 @@ class MainWindow(QMainWindow):
         self._ensure_render()
 
     def _on_rendered(self, request_id: int, page: int, dpi: int, seps: list[Separation]) -> None:
+        if request_id <= self._doc_floor:
+            return  # kapatılmış ya da değiştirilmiş belgeye ait
         self.pending.discard((page, dpi))
         self.render_cache[(page, dpi)] = seps
         while len(self.render_cache) > MAX_CACHED_RENDERS:
@@ -271,6 +338,8 @@ class MainWindow(QMainWindow):
         self._ensure_render()  # bu arada yakınlaştırma değişmiş olabilir
 
     def _on_failed(self, request_id: int, page: int, msg: str) -> None:
+        if request_id <= self._doc_floor:
+            return
         self.pending = {k for k in self.pending if k[0] != page}
         if request_id != self._request:
             return

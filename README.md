@@ -62,6 +62,11 @@ Linux (Arch/CachyOS): `sudo pacman -S ghostscript uv`, sonra aynı komutlar.
   yakınlaştırın, **Sığdır** (⌘0) geri alır.
 - **Çözünürlük: Otomatik** sayfayı ekranın (Retina dahil) gerektirdiği çözünürlükte işler;
   yakınlaştırınca daha yüksek DPI ile yeniden işler. İsterseniz sabit 72/150/300/600 dpi seçin.
+- Soldaki **Belge bilgisi** paneli (⌘I ile açılıp kapanır) PDF sürümünü ve PDF/X uyumluluğunu,
+  çıktı amacını ve gömülü ICC profillerini, kullanılan renk uzaylarını, o sayfanın kutularını
+  (Media/Trim/Bleed…, mm cinsinden) ve taşma payını, yazı tiplerinin gömülü olup olmadığını gösterir.
+  RGB nesneler ve gömülmemiş yazı tipleri turuncu ile işaretlenir.
+- **Dosya > Kapat** (⌘W) belgeyi kapatır, uygulama açık kalır.
 
 İşlenen sayfalar `~/Library/Caches/ayrim` altında saklanır; aynı dosya ve ayarla
 yeniden işlenmez.
@@ -75,7 +80,7 @@ uv run python tests/fixtures/make_fixtures.py   # test PDF'lerini yeniden üret
 
 Ghostscript ile doğrulanan davranışlar (10.02, `src/ayrim/separations.py`):
 - Kalıp pikselinde 0 = %100 mürekkep, 255 = mürekkep yok (`ink_from_pixel`).
-- Kalıp dosya adı `p<N>(<ad>).tif`; adda dosya adına uymayan karakterler `%XX`
+- Kalıp dosya adı `p<N>(<ad>).tif` (Ghostscript 10.08'den itibaren `p<N>.tif(<ad>).tif`); adda dosya adına uymayan karakterler `%XX`
   olarak yazılır (`/` → `%2F`, `%` → `%25`, `:` → `%3A`).
 - `-dSimulateOverprint` artık desteklenmiyor; `-sOverprint=simulate|disable` kullanılıyor.
 - Yalnızca sayfada kullanılan spotlar için dosya üretilir; CMYK her zaman üretilir.

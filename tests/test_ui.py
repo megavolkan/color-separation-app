@@ -67,3 +67,34 @@ def test_auto_dpi_follows_zoom(app, renderer, fixtures_dir):
     # dosya bırakma sayfa alanında yutulmaz, ana pencereye geçer
     assert not win.view.viewport().acceptDrops() and win.acceptDrops()
     win.close()
+
+
+def test_info_panel_and_close(app, renderer, tmp_path, fixtures_dir):
+    from make_fixtures import details_pdf
+    from test_docdetails import profile
+
+    from ayrim.ui.main_window import MainWindow
+
+    pdf = tmp_path / "details.pdf"
+    details_pdf(pdf, profile("ps_cmyk.icc"), profile("default_rgb.icc"))
+    win = MainWindow(renderer)
+    win.dpi_combo.setCurrentIndex(win.dpi_combo.findData(72))
+    assert not win.close_act.isEnabled()
+    win.open_pdf(pdf)
+    assert wait_for(app, lambda: win.seps and win.info_panel.details)
+    text = win.info_panel.toPlainText()
+    for part in ("Sürüm: 1.6", "PDF/X-4", "FOGRA39", "Artifex PS CMYK Profile", "ICC RGB", "95.2 × 95.2 mm",
+                 "Taşma payı: 3.0 mm", "Gelecek", "Helvetica", "gömülü değil"):
+        assert part in text, part
+
+    win.close_pdf()
+    assert not win.seps and win.info is None and not win.plates.rows
+    assert win.windowTitle() == "Ayrım" and not win.close_act.isEnabled()
+    assert "Belge açılmadı" in win.info_panel.toPlainText()
+
+    # kapatmadan hemen önce başlayan işleme sonradan gelse de gösterilmez
+    win.open_pdf(fixtures_dir / "basic.pdf")
+    win.close_pdf()
+    wait_for(app, lambda: False, timeout=2.0)
+    assert not win.seps and not win.render_cache
+    win.close()
