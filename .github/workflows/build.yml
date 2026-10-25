@@ -66,9 +66,26 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ghostscript
 
+      # Chocolatey paketi kurulumda takılıp zaman aşımına uğrayabiliyor; Artifex'in resmi
+      # kurucusu doğrudan indirilip sessiz kipte (/S) kuruluyor.
       - name: Ghostscript kur (Windows)
         if: runner.os == 'Windows'
-        run: choco install ghostscript --no-progress -y
+        shell: pwsh
+        timeout-minutes: 10
+        env:
+          GS_URL: https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10080/gs10080w64.exe
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "gs-setup.exe"
+          for ($i = 1; $i -le 4; $i++) {
+            try { Invoke-WebRequest $env:GS_URL -OutFile $installer; break }
+            catch { if ($i -eq 4) { throw }; Start-Sleep -Seconds (2 * $i) }
+          }
+          $p = Start-Process $installer -ArgumentList "/S" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Ghostscript kurucusu $($p.ExitCode) koduyla bitti" }
+          $bin = Get-ChildItem "C:\Program Files\gs\gs*\bin" | Select-Object -First 1
+          if (-not $bin) { throw "Ghostscript kurulduktan sonra bulunamadı" }
+          $bin.FullName >> $env:GITHUB_PATH
+          & (Join-Path $bin.FullName "gswin64c.exe") --version
 
       - name: Ghostscript ve Qt kütüphanelerini kur (Linux)
         if: runner.os == 'Linux'
