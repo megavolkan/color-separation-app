@@ -29,6 +29,9 @@ class PageInfo:
 class DocInfo:
     pages: list[PageInfo]
     spot_colors: dict[str, RGB | None] = field(default_factory=dict)
+    # Alternatif uzayı CMYK olan spotların %100 tint CMYK değerleri (profille ekran rengi için).
+    spot_cmyk: dict[str, tuple[float, float, float, float]] = field(default_factory=dict)
+    cmyk_profile: bytes | None = None  # çıktı amacı ya da gömülü CMYK ICC profili
 
     @property
     def page_count(self) -> int:
@@ -290,18 +293,28 @@ def to_srgb(space, values: list[float]) -> RGB | None:
 # ---------------------------------------------------------------- spot keşfi
 
 
-def _spot_colors_from_cs(cs, found: dict[str, RGB | None]) -> None:
+def _is_cmyk_space(space) -> bool:
+    if isinstance(space, pikepdf.Array) and len(space) > 1 and name_str(space[0]) == "ICCBased":
+        return int(space[1].get("/N", 0)) == 4
+    return name_str(space) in ("DeviceCMYK", "CMYK")
+
+
+def _spot_colors_from_cs(cs, found: dict[str, RGB | None], cmyk: dict | None = None) -> None:
+    cmyk = {} if cmyk is None else cmyk
     kind = name_str(cs[0])
     if kind == "Separation":
         name = name_str(cs[1])
         if name in _IGNORED_COLORANTS:
             return
         try:
-            color = to_srgb(cs[2], eval_function(cs[3], [1.0]))
+            values = eval_function(cs[3], [1.0])
+            color = to_srgb(cs[2], values)
         except Exception:
-            color = None
+            values, color = None, None
         if found.get(name) is None:
             found[name] = color
+            if color is not None and _is_cmyk_space(cs[2]) and len(values) >= 4:
+                cmyk[name] = tuple(min(max(v, 0.0), 1.0) for v in values[:4])
     elif kind == "DeviceN":
         names = [name_str(n) for n in cs[1]]
         attrs = cs[4] if len(cs) > 4 else None
@@ -310,18 +323,21 @@ def _spot_colors_from_cs(cs, found: dict[str, RGB | None]) -> None:
             if name in _IGNORED_COLORANTS:
                 continue
             if colorants is not None and pikepdf.Name("/" + name) in colorants:
-                _spot_colors_from_cs(colorants[pikepdf.Name("/" + name)], found)
+                _spot_colors_from_cs(colorants[pikepdf.Name("/" + name)], found, cmyk)
                 continue
             try:
                 vec = [1.0 if j == i else 0.0 for j in range(len(names))]
-                color = to_srgb(cs[2], eval_function(cs[3], vec))
+                values = eval_function(cs[3], vec)
+                color = to_srgb(cs[2], values)
             except Exception:
-                color = None
+                values, color = None, None
             if found.get(name) is None:
                 found[name] = color
+                if color is not None and _is_cmyk_space(cs[2]) and len(values) >= 4:
+                    cmyk[name] = tuple(min(max(v, 0.0), 1.0) for v in values[:4])
 
 
-def _walk(obj, found: dict[str, RGB | None], seen: set, depth: int = 0) -> None:
+def _walk(obj, found: dict[str, RGB | None], seen: set, depth: int = 0, cmyk: dict | None = None) -> None:
     if depth > 40:
         return
     if obj.is_indirect:
@@ -331,23 +347,45 @@ def _walk(obj, found: dict[str, RGB | None], seen: set, depth: int = 0) -> None:
         seen.add(key)
     if isinstance(obj, pikepdf.Array):
         if len(obj) >= 4 and isinstance(obj[0], pikepdf.Name) and name_str(obj[0]) in ("Separation", "DeviceN"):
-            _spot_colors_from_cs(obj, found)
+            _spot_colors_from_cs(obj, found, cmyk)
         for item in obj:
             if isinstance(item, (pikepdf.Array, pikepdf.Dictionary, pikepdf.Stream)):
-                _walk(item, found, seen, depth + 1)
+                _walk(item, found, seen, depth + 1, cmyk)
     elif isinstance(obj, (pikepdf.Dictionary, pikepdf.Stream)):
         for k in obj.keys():
             if k in ("/Parent", "/P"):
                 continue
             item = obj[k]
             if isinstance(item, (pikepdf.Array, pikepdf.Dictionary, pikepdf.Stream)):
-                _walk(item, found, seen, depth + 1)
+                _walk(item, found, seen, depth + 1, cmyk)
+
+
+def _icc_bytes(stream) -> bytes | None:
+    try:
+        data = stream.read_bytes()
+    except Exception:
+        return None
+    return data if len(data) >= 132 and data[36:40] == b"acsp" and data[16:20] == b"CMYK" else None
+
+
+def find_cmyk_profile(pdf: pikepdf.Pdf) -> bytes | None:
+    """Önizleme için CMYK profili: önce CMYK çıktı amacı, sonra belgede gömülü ilk CMYK ICC profili."""
+    for oi in pdf.Root.get("/OutputIntents", []):
+        dest = oi.get("/DestOutputProfile") if isinstance(oi, pikepdf.Dictionary) else None
+        if isinstance(dest, pikepdf.Stream) and (data := _icc_bytes(dest)):
+            return data
+    for obj in pdf.objects:
+        if isinstance(obj, pikepdf.Stream) and "/Subtype" not in obj and obj.get("/N") == 4:
+            if data := _icc_bytes(obj):
+                return data
+    return None
 
 
 def read_pdf_info(path: Path | str) -> DocInfo:
     with pikepdf.open(path) as pdf:
         pages = []
         found: dict[str, RGB | None] = {}
+        cmyk: dict[str, tuple[float, float, float, float]] = {}
         seen: set = set()
         for i, page in enumerate(pdf.pages, start=1):
             box = [float(v) for v in page.mediabox]
@@ -356,5 +394,5 @@ def read_pdf_info(path: Path | str) -> DocInfo:
             if rot:
                 w, h = h, w
             pages.append(PageInfo(i, w, h))
-            _walk(page.resources, found, seen)
-        return DocInfo(pages, found)
+            _walk(page.resources, found, seen, cmyk=cmyk)
+        return DocInfo(pages, found, cmyk, find_cmyk_profile(pdf))

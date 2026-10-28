@@ -44,7 +44,15 @@ BLEND_HELP = (
     "(boşaltma) ve renkler RGB'ye gidip gelirken değişebilir. Bu sayfalarda önizleme ile baskı farklı olabilir.<br><br>"
     "Çözüm: tasarım programında belge renk biçimini CMYK seçip CMYK çıktıyla (örn. PDF/X-4) dışa aktarın."
 )
+PREVIEW_KEY = "Önizleme profili"
+PREVIEW_HELP = (
+    "<b>Önizleme profili</b><br>"
+    "CMYK kalıplar ekranda bu ICC profiliyle gösterilir. Belgede çıktı amacı ya da gömülü bir CMYK "
+    "profili (örn. Coated FOGRA39) varsa o kullanılır; yoksa Ghostscript'in varsayılan CMYK profili.<br><br>"
+    "Spot renkler, PDF'teki alternatif renkleriyle CMYK önizlemesinin üzerine eklenir."
+)
 INFO_KEYS = {
+    PREVIEW_KEY: PREVIEW_HELP,
     OVERPRINT_KEY: OVERPRINT_HELP + "<br><br>Kalıp listesinde bu kalıpların yanında <b>OP</b> işareti görünür.",
     BLEND_KEY: BLEND_HELP,
 }
@@ -60,7 +68,7 @@ def _profile(p: IccProfile) -> str:
     return f"{escape(p.name)} ({p.color_space}, ICC {p.version})"
 
 
-def sections(d: DocDetails, page: int, t: Theme) -> list[tuple[str, Rows | str]]:
+def sections(d: DocDetails, page: int, t: Theme, preview: str | None = None) -> list[tuple[str, Rows | str]]:
     """Panel bölümleri: (başlık, satırlar) ya da (başlık, satır yoksa gösterilecek metin)."""
 
     def accent(text: str, small: bool = False) -> str:
@@ -85,6 +93,7 @@ def sections(d: DocDetails, page: int, t: Theme) -> list[tuple[str, Rows | str]]
         last = max(i for i, s in enumerate(d.color_spaces) if s in RGB_SPACES)
         lines[last] += " " + accent("RGB nesneler baskıda CMYK’ya dönüştürülür.", small=True)
     color.append(("Renk uzayları", "<br>".join(lines) or "—"))
+    color.append((PREVIEW_KEY, escape(preview) if preview else accent("yok (basit CMYK karışımı)")))
     color.append((OVERPRINT_KEY, "<br>".join(escape(n) for n in d.overprint) or "Yok"))
     spaces_used = sorted({p.blend_space for p in d.pages if p.blend_space})
     if spaces_used:
@@ -144,6 +153,7 @@ class InfoPanel(QScrollArea):
         self.details: DocDetails | None = None
         self.page = 1
         self._message = "Belge açılmadı."
+        self.preview: str | None = None
         self._rebuild()
 
     def set_theme(self, theme: Theme) -> None:
@@ -153,6 +163,11 @@ class InfoPanel(QScrollArea):
     def show_message(self, text: str) -> None:
         self.details, self._message = None, text
         self._rebuild()
+
+    def set_preview_profile(self, label: str | None) -> None:
+        self.preview = label
+        if self.details is not None:
+            self._rebuild()
 
     def set_details(self, details: DocDetails, page: int) -> None:
         self.details, self.page = details, page
@@ -183,7 +198,7 @@ class InfoPanel(QScrollArea):
             bl.addWidget(msg)
             lay.addWidget(box)
         else:
-            for i, (title, rows) in enumerate(sections(self.details, self.page, self.theme)):
+            for i, (title, rows) in enumerate(sections(self.details, self.page, self.theme, self.preview)):
                 if i:
                     line = QFrame()
                     line.setObjectName("sectionLine")

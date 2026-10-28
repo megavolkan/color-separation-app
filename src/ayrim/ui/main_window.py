@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 from PySide6.QtCore import QSize, Qt, QThreadPool, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
@@ -24,10 +25,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..composite import PROCESS_RGB, RGB, composite, grayscale, inks_at
+from ..colormgmt import CmykPreview, choose_profile
+from ..composite import PROCESS_RGB, RGB, composite, composite_cmyk, grayscale, inks_at
 from ..gs import Renderer
 from ..pdfinfo import DocInfo, read_pdf_info
-from ..separations import Separation
+from ..separations import PROCESS_NAMES, Separation
 from . import icons
 from .about import about_html
 from .info_panel import InfoPanel
@@ -52,6 +54,9 @@ class MainWindow(QMainWindow):
         self.pool = QThreadPool.globalInstance()
         self.pdf: Path | None = None
         self.info: DocInfo | None = None
+        self.preview: CmykPreview | None = None  # CMYK → ekran rengi profili
+        self._colors: dict[str, RGB] = {}  # profille hesaplanan kalıp renkleri
+        self._cmyk_cache: tuple | None = None  # (kalıplar, CMYK kalıp adları, sRGB) son dönüşüm
         self.page = 1
         self.manual_dpi: int | None = None  # None = otomatik
         self.shown_dpi = 0
@@ -304,6 +309,7 @@ class MainWindow(QMainWindow):
             return
         self._reset_document()
         self.pdf, self.info = path, info
+        self._set_preview(choose_profile(info.cmyk_profile, self.renderer.gs.path))
         self.close_act.setEnabled(True)
         self.info_panel.show_message("Belge bilgisi okunuyor…")
         task = DetailsTask(path, self._doc_id)
@@ -324,6 +330,7 @@ class MainWindow(QMainWindow):
             return
         self._reset_document()
         self.pdf, self.info = None, None
+        self._set_preview(None)
         self.page = 1
         self.seps, self.shown_dpi = [], 0
         self.checked.clear()
@@ -475,13 +482,43 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------ önizleme
 
+    def _set_preview(self, preview: CmykPreview | None) -> None:
+        self.preview = preview
+        self._colors.clear()
+        self._cmyk_cache = None
+        self.info_panel.set_preview_profile(preview.label if preview else None)
+
     def plate_color(self, name: str) -> tuple[RGB, bool]:
         if name in self.color_overrides:
             return self.color_overrides[name], True
+        if name in self._colors:
+            return self._colors[name], True
+        if self.preview is not None:
+            cmyk = None
+            if name in PROCESS_NAMES:
+                cmyk = tuple(1.0 if n == name else 0.0 for n in PROCESS_NAMES)
+            elif self.info and name in self.info.spot_cmyk:
+                cmyk = self.info.spot_cmyk[name]
+            if cmyk is not None:
+                self._colors[name] = self.preview.color(*cmyk)
+                return self._colors[name], True
         if name in PROCESS_RGB:
             return PROCESS_RGB[name], True
         color = self.info.spot_colors.get(name) if self.info else None
         return (color, True) if color else (UNKNOWN_SPOT_RGB, False)
+
+    def _cached_to_rgb(self, process: tuple[str, ...]):
+        """Aynı kalıplar için profil dönüşümünü tekrarlamaz (spot açıp kapatmak hızlı kalsın)."""
+        cache = self._cmyk_cache
+        if cache is not None and cache[0] is self.seps and cache[1] == process:
+            return lambda cmyk: cache[2]
+
+        def convert(cmyk: np.ndarray) -> np.ndarray:
+            rgb = self.preview.to_rgb(cmyk)
+            self._cmyk_cache = (self.seps, process, rgb)
+            return rgb
+
+        return convert
 
     def _on_plate_selection(self) -> None:
         names = set(self.plates.checked_names())
@@ -502,7 +539,14 @@ class MainWindow(QMainWindow):
         if len(active) == 1 and self.gray_box.isChecked():
             rgb = grayscale(active[0].ink)
         else:
-            rgb = composite([(s.ink, self.plate_color(s.name)[0]) for s in active], shape=self.seps[0].ink.shape)
+            shape = self.seps[0].ink.shape
+            if self.preview is None:
+                rgb = composite([(s.ink, self.plate_color(s.name)[0]) for s in active], shape=shape)
+            else:
+                # Renk değiştirilmemiş CMYK kalıpları profille, diğerleri üzerine çarpılarak.
+                process = {s.name: s.ink for s in active if s.is_process and s.name not in self.color_overrides}
+                others = [(s.ink, self.plate_color(s.name)[0]) for s in active if s.name not in process]
+                rgb = composite_cmyk(self._cached_to_rgb(tuple(sorted(process))), process, others, shape)
         self.view.set_image(rgb, self.shown_dpi)
 
     def _on_hover(self, x: int, y: int) -> None:

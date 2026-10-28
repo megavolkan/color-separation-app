@@ -57,6 +57,10 @@ Linux (Arch/CachyOS): `sudo pacman -S ghostscript uv`, sonra aynı komutlar.
   kapsama oranı yazar. O sayfada üste baskı (overprint) ile basılan kalıpların yanında **OP** işareti çıkar.
   Etkisi olmayan üste baskı (altında mürekkep olmayan zemin, kayıt rengindeki kesim işaretleri) sayılmaz. Satırın sağındaki renk kutusuna tıklayarak kalıbın ekran rengini değiştirebilirsiniz
   (rengi PDF'ten okunamayan spotlar için).
+- Renkler ICC profiliyle gösterilir: CMYK kalıplar belgenin CMYK profiliyle (çıktı amacı ya da gömülü
+  profil, örn. Coated FOGRA39), belgede profil yoksa Ghostscript'in varsayılan CMYK profiliyle sRGB'ye
+  çevrilir. Spot renkler, PDF'teki CMYK alternatifleri aynı profille çevrilerek üzerine eklenir. Kullanılan
+  profil, Belge bilgisi panelinde **Önizleme profili** satırında yazar.
 - Tek kalıp seçiliyken **Tek kalıbı gri göster** ile kalıp gri tonlu görünür.
 - İmleci sayfada gezdirin: alttaki panel her kalıbın yüzdesini ve toplam mürekkebi (TAC) gösterir.
 - Sağ üstteki **− 1 / 3 +** düğmeleriyle (PageUp/PageDown) sayfalar arasında gezinin. Büyüteç düğmeleri,
